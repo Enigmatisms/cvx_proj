@@ -69,6 +69,7 @@ def visualize_feature_pairs(center_img: np.ndarray, other_img: np.ndarray, case_
     )
     
     out_img = cv.drawMatches(center_img, kpts_cp, other_img, kpts_op, matches, out_image, **draw_params)
+    print(f"Number of matches: {len(matches)}, valid matches: {mask.sum()}")
     if disp:
         print("Press any key to quit.")
         while True:
@@ -89,6 +90,6 @@ if __name__ == "__main__":
     if argv_len > 2:
         img_idx = int(argv[2]) 
         
-    center_img = visualize_equalized_hist()
-    other_img = visualize_equalized_hist(img_idx = img_idx)
+    center_img = visualize_equalized_hist(case_idx = case_idx, img_idx = CENTER_PIC_ID)
+    other_img = visualize_equalized_hist(case_idx = case_idx, img_idx = img_idx)
     visualize_feature_pairs(center_img, other_img, case_idx = case_idx, pic_id = img_idx, disp = True)
