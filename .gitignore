@@ -1,3 +1,4 @@
 diff_1/**
 *.zip
 *.png
+**/__pycache__
