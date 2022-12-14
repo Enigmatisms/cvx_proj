@@ -30,3 +30,7 @@ def visualize_equalized_hist(case_idx = 1, img_idx = 3, disp = False):
     if disp:
         imshow("equalized hist", img_eq)
     return img_eq
+
+"""
+    Inverse projection via intrinsic matrix
+"""
