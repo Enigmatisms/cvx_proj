@@ -10,21 +10,13 @@ import scipy
 import scipy.io
 import cv2 as cv
 import numpy as np
-import pandas as pd
 import matplotlib.pyplot as plt
 
-from utils import get_base_path, visualize_equalized_hist, imshow
-from scipy.spatial.transform import Rotation as Rot
 from itertools import compress
+from utils import *
 
 CENTER_PIC_ID = 3
 PIC_LIST = (1, 2, 3, 4, 5)
-
-__T = np.float32([
-    [1, 0, 0],
-    [0, 0, 1],
-    [0, -1, 0]
-])
 
 def has_affinity(res_src_pts: list, pt: np.ndarray) -> int:
     for i, kpt in enumerate(res_src_pts):
@@ -34,23 +26,7 @@ def has_affinity(res_src_pts: list, pt: np.ndarray) -> int:
     return -1
 
 # Read Rotation, Translation and Intrinsic Matrix
-def read_rot_trans_int(path: str):
-    poses = pd.read_excel(path, sheet_name="Parameters of UAV").to_numpy()[..., 1:].astype(np.float32)
-    position = poses[..., :3]
-    euler_angles = poses[..., 3:]
-    Rs = []
-    for euler in euler_angles:
-        # Roll(y axis), Yaw (z axis), Pitch (x axis)
-        euler[1] = -euler[1]
-        r: Rot = Rot.from_euler("yzx", euler, degrees = True)          # deg 2 rad
-        r2: Rot = Rot.from_euler("YZX", euler, degrees = True)          # deg 2 rad
-        # print(r.as_matrix(), r2.as_matrix(), r.as_matrix() @ r2.as_matrix())
-        Rs.append(r.as_matrix())
-    R = np.stack(Rs, axis = 0)
-    K = pd.read_excel(path, sheet_name="Parameters of camera").to_numpy()[..., 1:].astype(np.float32)
 
-    # shape R: (N, 3, 3), position: (N, 3), K: (3, 3)
-    return R, position, K
 
 def match_all(case_idx: int, debug_disp: bool = False, verbose: bool = False):
     # Data preparation
@@ -70,14 +46,8 @@ def match_all(case_idx: int, debug_disp: bool = False, verbose: bool = False):
         feat_mat = feature_mat[idx - 1 if idx < CENTER_PIC_ID else idx - 2][0]
         raw_kpts_op = feat_mat[3:-1, :].T              # raw keypoints of non-center pictures, discarding the homogeneous dim
         raw_kpts_cp = feat_mat[:2, :].T                # raw keypoints of the center pictures, discarding the homogeneous dim
-
-        kpts_cp = [cv.KeyPoint(*pt, 1) for pt in raw_kpts_cp]
-        kpts_op = [cv.KeyPoint(*pt, 1) for pt in raw_kpts_op]
-        extractor = cv.SIFT.create(32)
-        (kpts_cp, feats_cp) = extractor.compute(center_img, kpts_cp)
-        (kpts_op, feats_op) = extractor.compute(other_img, kpts_op)
-        macther = cv.FlannBasedMatcher()
-        matches = macther.match(feats_cp, feats_op)
+        
+        kpts_cp, _, kpts_op, _, matches = coarse_matching(center_img, other_img, raw_kpts_cp, raw_kpts_op)
         src_pts = np.float32([ kpts_cp[m.queryIdx].pt for m in matches ]).reshape(-1,1,2)
         dst_pts = np.float32([ kpts_op[m.trainIdx].pt for m in matches ]).reshape(-1,1,2)
         _, mask = cv.findHomography(src_pts, dst_pts, cv.RANSAC, 5.0)
@@ -149,21 +119,6 @@ def visualize_covid(all_imgs: list, covid: list, res_src_pts: list, all_dst_pts:
         multi_covid_cnt += 1
     if verbose:
         print(f"Item with covisibility: {multi_covid_cnt} out of {len(covid)}")
-        
-"""
-    Transform pixel coordinates (non-homogeneous) to world frame ray direction    
-    Logic should be checked (matplotlib plot3d)
-    pix: shape (N, 2, 1) N = number of covisible frames
-"""
-def world_frame_ray_dir(K_inv: np.ndarray, pix: np.ndarray, Rs: np.ndarray):
-    num_covi = pix.shape[0]
-    homo_pix = np.concatenate((pix, np.ones((num_covi, 1, 1))), axis = 1)      # shape (N, 3, 1)
-    camera_coords = K_inv @ homo_pix                                            # K_inv for inverse projection
-    print("Camera: ", camera_coords.ravel())
-    init_w_coords = __T @ camera_coords
-    print("Init: ", init_w_coords.ravel())
-    init_w_coords = init_w_coords / np.linalg.norm(init_w_coords, axis = 1)[:, None, :]     # normalize along axis 0
-    return Rs @ init_w_coords                # normalized ray direction in the world frame
 
 def solve_3d_position(wf_origins: np.ndarray, wf_ray_dir: np.ndarray, verbose = False):
     As = np.eye(3) - wf_ray_dir @ np.transpose(wf_ray_dir, [0, 2, 1])

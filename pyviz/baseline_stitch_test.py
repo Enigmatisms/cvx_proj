@@ -20,27 +20,10 @@ def get_no_scat_img(case_idx, img_idx, center_id = CENTER_PIC_ID):
     return cv.imread(ctr_path), cv.imread(img_path)
     
 def visualize_feature_pairs(center_img: np.ndarray, other_img: np.ndarray, case_idx: int = 1, pic_id: int = 1, disp = False):
-    mat_file_path = f"{get_base_path(case_idx)}/keypoints.mat"
-    feature_mat = scipy.io.loadmat(mat_file_path)["keypoints"]
-    # print(feature_mat)
-    valid_pic_id = {1, 2, 3, 4, 5}
-    valid_pic_id.remove(CENTER_PIC_ID)
-    if not pic_id in valid_pic_id:
-        raise ValueError(f"{pic_id} not valid (3 is the id of the center image, therefore [1, 2, 4, 5] are available)")
-
-    feat_mat = feature_mat[pic_id - 1 if pic_id < CENTER_PIC_ID else pic_id - 2][0]
-    raw_kpts_op = feat_mat[3:-1, :].T              # raw keypoints of non-center pictures, discarding the homogeneous dim
-    raw_kpts_cp = feat_mat[:2, :].T                # raw keypoints of the center pictures, discarding the homogeneous dim
-
     out_image = np.concatenate((center_img, other_img), axis = 1)
-    kpts_cp = [cv.KeyPoint(*pt, 1) for pt in raw_kpts_cp]
-    kpts_op = [cv.KeyPoint(*pt, 1) for pt in raw_kpts_op]
 
-    extractor = cv.SIFT.create(32)
-    (kpts_cp, feats_cp) = extractor.compute(center_img, kpts_cp)
-    (kpts_op, feats_op) = extractor.compute(other_img, kpts_op)
-    macther = cv.FlannBasedMatcher()
-    matches = macther.match(feats_cp, feats_op)
+    raw_kpts_cp, raw_kpts_op = get_features(case_idx, pic_id, CENTER_PIC_ID)
+    kpts_cp, _, kpts_op, _, matches = coarse_matching(center_img, other_img, raw_kpts_cp, raw_kpts_op)
     
     print(f"Coarse matching result: {len(matches)}")
     
@@ -63,7 +46,7 @@ def visualize_feature_pairs(center_img: np.ndarray, other_img: np.ndarray, case_
     print(f"Number of matches: {len(matches)}, valid matches: {mask.sum()}")
     if disp:
         imshow("key point RANSAC", out_img)
-    cv.imwrite("result.png", out_img)
+    cv.imwrite("./output/result.png", out_img)
     return H
 
 def image_warping(img_base: np.ndarray, img2warp: np.ndarray, H: np.ndarray, direct_blend = True):
@@ -100,7 +83,7 @@ def image_warping(img_base: np.ndarray, img2warp: np.ndarray, H: np.ndarray, dir
 def visualize_warpped_result(center_img: np.ndarray, other_img: np.ndarray, H: np.ndarray, direct_blend = False):
     warped = image_warping(other_img, center_img, H, direct_blend)
     imshow("warpped image", warped)
-    cv.imwrite("warpped_result.png", warped)
+    cv.imwrite("./output/warpped_result.png", warped)
     
 if __name__ == "__main__":
     argv_len = len(argv)
