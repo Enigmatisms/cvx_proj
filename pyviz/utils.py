@@ -52,7 +52,7 @@ def coarse_matching(c_img: np.ndarray, o_img: np.ndarray, raw_kpts_cp: np.ndarra
     kpts_cp = [cv.KeyPoint(*pt, 1) for pt in raw_kpts_cp]
     kpts_op = [cv.KeyPoint(*pt, 1) for pt in raw_kpts_op]
 
-    extractor = cv.SIFT.create(32)
+    extractor = cv.SIFT.create(nfeatures = 128)
     (kpts_cp, feats_cp) = extractor.compute(c_img, kpts_cp)
     (kpts_op, feats_op) = extractor.compute(o_img, kpts_op)
     macther = cv.FlannBasedMatcher()

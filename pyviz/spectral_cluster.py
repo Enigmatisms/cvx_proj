@@ -92,7 +92,7 @@ def calculate_M(
     
 def visualize_weighted(c_img: Arr, o_img: Arr, kpts_cp: list, kpts_op: list, matches: list, weight: Arr):
     offset_x = c_img.shape[1]
-    out_image = np.concatenate((center_img, other_img), axis = 1)
+    out_image = np.concatenate((c_img, o_img), axis = 1)
     for m, w in zip(matches, weight):
         if w <= 1e-3: continue
         xc, yc = kpts_cp[m.queryIdx].pt
