@@ -6,7 +6,6 @@
     @date: 2022-12-12
 """
 
-import scipy.io
 import cv2 as cv
 import numpy as np
 from sys import argv

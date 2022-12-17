@@ -1,15 +1,20 @@
+#-*-coding:utf-8-*-
+"""
+    Huber loss homography solver (gradient descend)
+    @author: Qianyue He
+    @date: 2022-12-16
+"""
+
 import torch
-import numpy as np
 from torch import nn
 from torch import Tensor
 from einops import rearrange
 
-
-"""
-    Use torch again as the auto-differentiator
-    Of course we can choose to use CUDA, but...
-"""
-class Solver(nn.Module):
+class HuberSolver(nn.Module):
+    """
+        Use torch again as the auto-differentiator
+        Of course we can choose to use CUDA, but...
+    """
     def __init__(self) -> None:
         super().__init__()
         self.h = nn.Parameter(torch.rand(8, 1), requires_grad = True)
@@ -32,4 +37,5 @@ class Solver(nn.Module):
         rhs = pts_o.reshape(-1, 1)
         weights = weights.unsqueeze(dim = -1).expand(-1, 2).reshape(-1, 1)      # make [1, 2, 3] -> [[1], [1], [2], [2], [3], [3]] -- shape (2N, 1)
         diff = weights * (lhs @ self.h - rhs)                                   # difference (weighted)
-        return Solver.huber_loss(diff)
+        return HuberSolver.huber_loss(diff)
+        

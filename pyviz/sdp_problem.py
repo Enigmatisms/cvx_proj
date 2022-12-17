@@ -1,3 +1,10 @@
+#-*-coding:utf-8-*-
+"""
+    SDP dual problem for Robust MMSE
+    @author: Qianyue He
+    @date: 2022-12-16
+"""
+
 import time
 import cvxpy as cp
 import numpy as np
@@ -34,11 +41,13 @@ class SDPSolver:
         rhs = pts_o.reshape(-1, 1) * weights
 
         u_pmatrix = np.repeat(np.float32([[self.du, 0]]), repeats = num_points, axis = 0)
+        # FIXME: this seems to have some minor problems (should be related to self.du)
         u_rare    = np.hstack((-pts_o.reshape(-1, 1), np.zeros((num_points << 1, 1))))
         u_front   = SDPSolver.get_shifted(u_pmatrix, num_points, 0.0).reshape(-1, 6)
         A1 = np.concatenate([u_front, u_rare], axis = -1) * weights
         
         v_pmatrix = np.repeat(np.float32([[0, self.dv]]), repeats = num_points, axis = 0)
+        # FIXME: this seems to have some minor problems (should be related to self.du)
         v_rare    = np.hstack((np.zeros((num_points << 1, 1)), -pts_o.reshape(-1, 1)))
         v_front   = SDPSolver.get_shifted(v_pmatrix, num_points, 0.0).reshape(-1, 6)
         A2 = np.concatenate([v_front, v_rare], axis = -1) * weights

@@ -1,19 +1,18 @@
 #-*-coding:utf-8-*-
 """
-    Python visualization of SIFT-RANSAC baseline blendering (Ghost Effect) 
-    This is the baseline model
+    Spectral weighting with pair-wise consistency estimation
     @author: Qianyue He
-    @date: 2022-12-12
+    @date: 2022-12-14
 """
 
 import cv2 as cv
 import numpy as np
-from sys import argv
-from utils import *
 import matplotlib.pyplot as plt
+
+from utils import *
+from sys import argv
 from numpy import ndarray as Arr
 from sdp_problem import SDPSolver
-from itertools import compress
 
 CENTER_PIC_ID = 3
 
@@ -23,22 +22,11 @@ def get_coarse_matches(center_img: Arr, other_img: Arr, case_idx: int = 1, pic_i
     return coarse_matching(center_img, other_img, raw_kpts_cp, raw_kpts_op)
 
 def match_RANSAC(kpts_cp: Arr, kpts_op: Arr, matches: Arr):
-    src_pts = np.float32([ kpts_cp[m.queryIdx].pt for m in matches ]).reshape(-1,1,2)
-    dst_pts = np.float32([ kpts_op[m.trainIdx].pt for m in matches ]).reshape(-1,1,2)
+    src_pts, dst_pts = cv_to_array(kpts_cp, kpts_op, matches)
     H, mask = cv.findHomography(src_pts, dst_pts, cv.RANSAC, 5.0)
     mask = mask.astype(np.float32)
-    return H, mask
+    return H, mask.ravel()
 
-# get fundamental matrix through given pose and camera intrinsic
-def fundamental(Rc, Ro, tc, to, K):
-    Ro_inv = np.linalg.inv(Ro)
-    Rr = Ro_inv @ Rc                        # relative rotation (transform point in center frame to other frame)
-    tr = Ro_inv @ (tc - to)                 # relative translation
-    ss_t = skew_symmetric_transform(tr)     # 3 * 3 skew symmetric matrix
-    K_inv = np.linalg.inv(K)
-    return K_inv.T @ ss_t @ Rr @ K_inv
-
-# Get matrix M, F is fundamental matrix
 def calculate_M(
     kpts_cp: list, feats_cp: Arr, 
     kpts_op: list, feats_op: Arr, 
@@ -46,6 +34,15 @@ def calculate_M(
     f_scaler: float = 0.5, eps: float = 30.0, 
     threshold: float = 0.6, verbose = False, output_ransac = True
 ):
+    """ 
+        Calculate adjacency matrix M: diagonal part: mathcing score, off-diagonal part: consistency score
+        - kpts_cp: keypoints for center image, feats_cp: features for center image
+        - kpts_op: keypoints for image in other view, feats_op: features for image in other view
+        - F: fundamental matrix for epipolar constraint score
+        - matches: coarse matches produced by FLANN, f_scaler: score scaler for epipolar constraints
+        - threshold: segmentation score bigger than this will be counted
+        - For loop free, as SIMD as possible via numpy
+    """
     if output_ransac:
         H, ransac_mask = match_RANSAC(kpts_cp, kpts_op, matches)
     else:
@@ -53,52 +50,42 @@ def calculate_M(
         ransac_mask = None
     num_matches = len(matches)
     M = np.zeros((num_matches, num_matches))
+    
     # computing diagonal part
-    for i, match in enumerate(matches):
-        c_feat = feats_cp[match.queryIdx]
-        o_feat = feats_op[match.trainIdx]
-        c_feat /= np.linalg.norm(c_feat)
-        o_feat /= np.linalg.norm(o_feat)
-        
-        xc, yc = kpts_cp[match.queryIdx].pt
-        xo, yo = kpts_op[match.trainIdx].pt
-        c_pix  = np.float32([[xc], [yc], [1]])
-        o_pix  = np.float32([[xo, yo, 1]])
-        epi_score = abs(o_pix @ F @ c_pix)
-        M[i, i] = np.sum(c_feat * o_feat) + f_scaler / (1. + epi_score)
+    src_pts, dst_pts = cv_to_array(kpts_cp, kpts_op, matches)
+    homo_src_pts     = np.hstack((src_pts, np.ones((num_matches, 1))))     # homogeneous coordinates
+    homo_dst_pts     = np.hstack((dst_pts, np.ones((num_matches, 1))))     # homogeneous coordinates
+    c_feats, o_feats = cv_to_array(feats_cp, feats_op, matches, is_pts = False)
+    
+    c_feats    /= np.linalg.norm(c_feats, axis = -1, keepdims=True)
+    o_feats    /= np.linalg.norm(o_feats, axis = -1, keepdims=True)
+    epi_vectors = F @ homo_src_pts.T                 # src_pts is of shape (N, 3), transpose it -> (3, N)
+    epi_score   = np.abs(np.sum(homo_dst_pts * epi_vectors.T, axis = -1))
+    match_score = np.sum(c_feats * o_feats, axis = -1)
+    M           = np.diag(match_score + f_scaler / (1. + epi_score))
     # computing off-diagonal part
-    rcp_value = 1 / 2 / (eps ** 2)
-    for i in range(num_matches):
-        for j in range(i, num_matches):
-            if i == j: continue
-            m1, m2 = matches[i], matches[j]
-            xc_1, yc_1 = kpts_cp[m1.queryIdx].pt
-            xo_1, yo_1 = kpts_op[m1.trainIdx].pt
-            
-            xc_2, yc_2 = kpts_cp[m2.queryIdx].pt
-            xo_2, yo_2 = kpts_op[m2.trainIdx].pt
-            d1 = (xc_1 - xc_2) ** 2 + (yc_1 - yc_2) ** 2
-            d2 = (xo_1 - xo_2) ** 2 + (yo_1 - yo_2) ** 2
-            score = max(0, 4.5 - ((d1 - d2) ** 2) * rcp_value)
-            M[i, j] = score
-            M[j, i] = score
-    U, _, _  = np.linalg.svd(M)
+    rcp_value   = 1 / 2 / (eps ** 2)
+    src_matrix  = np.sum((src_pts.reshape(-1, 1, 2) - src_pts.reshape(1, -1, 2)) ** 2, axis = -1)    # (N, N), distance between points in src img
+    dst_matrix  = np.sum((dst_pts.reshape(-1, 1, 2) - dst_pts.reshape(1, -1, 2)) ** 2, axis = -1)    # (N, N), distance between points in dst img
+    dist_matrix = ((src_matrix - dst_matrix) ** 2) * rcp_value
+    off_score   = np.maximum(4.5 - dist_matrix, 0.)         # clamp
+    np.fill_diagonal(off_score, 0.)                         # diagonal is already computed
+    M          += off_score                                 # segmentation matrix is fully computed
+
+    U, _, _  = np.linalg.svd(M)         # SVD decomposition for the principle eigenvector
     segment  = np.abs(U[:, 0])
     segment /= np.max(segment)
     segment[segment < 1e-6] = 0
     if verbose:
-        for i, (match, m_value) in enumerate(zip(matches, ransac_mask)):
+        for i, m_value in enumerate(ransac_mask):
             valid = (m_value > 0) if output_ransac else "Unknown"
             print(f"Matching score: {M[i, i]:.4f}\tvalid match: {valid}/{segment[i]}")
         plt.imshow(M)
         plt.colorbar()
         plt.show()
-    for i in range(num_matches):
-        w = segment[i]
-        if w > threshold:
-            ransac_mask[i] = w
-        else:
-            ransac_mask[i] *= threshold
+    bool_mask = segment > threshold
+    ransac_mask *= threshold
+    ransac_mask[bool_mask] = segment[bool_mask]     # array thresholding
     return segment, ransac_mask, H
     
 def visualize_weighted(c_img: Arr, o_img: Arr, kpts_cp: list, kpts_op: list, matches: list, weight: Arr):
@@ -115,7 +102,7 @@ def visualize_weighted(c_img: Arr, o_img: Arr, kpts_cp: list, kpts_op: list, mat
         cv.circle(out_image, p2, 5, (0, int(255 * w), 0), 1)
     imshow("weighted", out_image)
     
-def sdp_model_solve(kpts_cp: list, kpts_op: list, matches: list, weights: Arr) -> Arr:
+def sdp_model_solve(kpts_cp: list, kpts_op: list, matches: list, weights: Arr, verbose = False) -> Arr:
     weights = weights.ravel()
     pts_c = []
     pts_o = []
@@ -133,7 +120,9 @@ def sdp_model_solve(kpts_cp: list, kpts_op: list, matches: list, weights: Arr) -
     selected_weights = np.float32(selected_weights)
     
     solver = SDPSolver(0.5, 0.5)
-    return solver.solve(pts_c, pts_o, selected_weights, verbose = True)
+    return solver.solve(pts_c, pts_o, selected_weights, verbose = verbose)
+
+
         
 if __name__ == "__main__":
     argv_len = len(argv)
@@ -144,23 +133,22 @@ if __name__ == "__main__":
     if argv_len > 2:
         img_idx = int(argv[2]) 
         
-    center_img = visualize_equalized_hist(case_idx = case_idx, img_idx = CENTER_PIC_ID)
-    other_img = visualize_equalized_hist(case_idx = case_idx, img_idx = img_idx)
-    Rs, ts, K = read_rot_trans_int(f"{get_base_path(case_idx)}/Parameters.xlsx")
-    print(K)
-    kpts_cp, feats_cp, kpts_op, feats_op, matches = get_coarse_matches(center_img, other_img, case_idx, img_idx)
-    Rc = Rs[CENTER_PIC_ID - 1]
-    tc = ts[CENTER_PIC_ID - 1]
-    Ro = Rs[img_idx - 1]
-    to = ts[img_idx - 1]
-    F = fundamental(Rc, Ro, tc, to, K)
+    center_img  = visualize_equalized_hist(case_idx = case_idx, img_idx = CENTER_PIC_ID)
+    other_img   = visualize_equalized_hist(case_idx = case_idx, img_idx = img_idx)
+    
+    kpts_cp, feats_cp, kpts_op, feats_op, matches \
+        = get_coarse_matches(center_img, other_img, case_idx, img_idx)
+    F   = get_fundamental(case_idx, CENTER_PIC_ID, img_idx)
+    
     weights, ransac_mask, H = calculate_M(kpts_cp, feats_cp, kpts_op, feats_op, F, matches)
-    visualize_weighted(center_img, other_img, kpts_cp, kpts_op, matches, weights)
-    # visualize_weighted(center_img, other_img, kpts_cp, kpts_op, matches, ransac_mask)
-    H_sdp = sdp_model_solve(kpts_cp, kpts_op, matches, ransac_mask)
+    visualize_weighted(center_img, other_img, kpts_cp, kpts_op, matches, weights)               # visualize segmentation
+    # visualize_weighted(center_img, other_img, kpts_cp, kpts_op, matches, ransac_mask)         # visualize RANSAC
+
+    H_sdp = sdp_model_solve(kpts_cp, kpts_op, matches, ransac_mask, verbose = True)
     print("Ground truth homography: ", H.ravel())
     
     center_img_nc, other_img_nc = get_no_scat_img(case_idx, img_idx, CENTER_PIC_ID)
+    
     warpped_baseline = image_warping(other_img_nc, center_img_nc, H, False)
     warpped_sdp      = image_warping(other_img_nc, center_img_nc, H_sdp, False)
     cv.imwrite("./output/sdp.png", warpped_sdp)
