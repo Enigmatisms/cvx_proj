@@ -1,9 +1,10 @@
+import time
 import cvxpy as cp
 import numpy as np
 from numpy import ndarray as Arr
 
 class SDPSolver:
-    def __init__(self, du = 2.0, dv = 2.0) -> None:
+    def __init__(self, du = 1.0, dv = 1.0) -> None:
         self.du = du
         self.dv = dv
 
@@ -22,7 +23,7 @@ class SDPSolver:
     """
         Create a semi-positive definite matrix constraint
     """
-    def solve(self, pts_c: Arr, pts_o: Arr, weights: Arr):
+    def solve(self, pts_c: Arr, pts_o: Arr, weights: Arr, verbose = 1):
         # First: re-arrange pts_c to a reasonable structure
         num_points = pts_c.shape[0]
         rare_part = -pts_o[..., None] @ pts_c[:, None, :]        # shape (N, 2, 2)
@@ -52,20 +53,33 @@ class SDPSolver:
         last_one[-1, -1] = 1
         M = self.r * last_zero + self.t * last_one 
 
-        print(Pxqx.shape)
         upper_part = cp.hstack((np.eye(num_points << 1), Pxqx))
         lower_part = cp.hstack((Pxqx.T, M))
-
         constraint_matrix = cp.vstack((upper_part, lower_part))
-        problem = cp.Problem(cp.Minimize(self.t + self.r), [constraint_matrix >> 0])
-        problem.solve()
-        print("The optimal value is", problem.value)
-        print("Optimal solution:", self.h.value)
 
-if __name__ == "__main__":
+        if verbose > 1:
+            print(constraint_matrix)
+        problem = cp.Problem(cp.Minimize(self.t + self.r), [constraint_matrix >> 0])
+        start_time = time.time()
+        if verbose:
+            print("Start solving...")
+        problem.solve()
+        if verbose:
+            print(f"Problem solved. Time consumption: {time.time() - start_time:.3f}")
+            print("The optimal value is", problem.value)
+            print("Optimal solution:", self.h.value.ravel())
+        solution = np.ones(9, dtype = np.float32)
+        solution[:-1] = self.h.value.ravel()
+        return solution.reshape(3, 3)
+    
+def validation_test():
     pts_c = np.random.rand(20, 2)
     pts_o = np.random.rand(20, 2)
     weights = np.random.rand(20) * 0.7 + 0.3
 
     solver = SDPSolver()
-    solver.solve(pts_c, pts_o, weights)
+    solver.solve(pts_c, pts_o, weights, verbose = True)
+    
+
+if __name__ == "__main__":
+    validation_test()

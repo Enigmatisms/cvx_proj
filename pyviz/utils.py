@@ -48,6 +48,11 @@ def visualize_equalized_hist(case_idx = 1, img_idx = 3, disp = False):
         imshow("equalized hist", img_eq)
     return img_eq
 
+def get_no_scat_img(case_idx, img_idx, center_id):
+    img_path = get_path(case_idx, img_idx, True)
+    ctr_path = get_path(case_idx, center_id, True)
+    return cv.imread(ctr_path), cv.imread(img_path)
+
 def coarse_matching(c_img: np.ndarray, o_img: np.ndarray, raw_kpts_cp: np.ndarray, raw_kpts_op: np.ndarray):
     kpts_cp = [cv.KeyPoint(*pt, 1) for pt in raw_kpts_cp]
     kpts_op = [cv.KeyPoint(*pt, 1) for pt in raw_kpts_op]
@@ -103,3 +108,39 @@ def read_rot_trans_int(path: str):
 
     # shape R: (N, 3, 3), position: (N, 3), K: (3, 3)
     return R, position, K
+
+"""
+    Warp image given homography matrix    
+    direct blend: if True --- warpped pixel will cover the base image, 
+    otherwise mean will be computed (ghost effect can be observed) 
+"""
+def image_warping(img_base: np.ndarray, img2warp: np.ndarray, H: np.ndarray, direct_blend = True):
+    h1,w1 = img_base.shape[:2]
+    h2,w2 = img2warp.shape[:2]
+    pts1 = np.float32([[0, 0], [0, h1], [w1, h1], [w1, 0]]).reshape(-1, 1, 2)
+    pts2 = np.float32([[0, 0], [0, h2], [w2, h2], [w2, 0]]).reshape(-1, 1, 2)
+    pts2_ = cv.perspectiveTransform(pts2, H)                            # warpped image boundaries
+    pts = np.concatenate((pts1, pts2_), axis=0)
+    [xmin, ymin] = np.int32(pts.min(axis = 0).ravel() - 0.5)
+    [xmax, ymax] = np.int32(pts.max(axis = 0).ravel() + 0.5)
+    t = [-xmin, -ymin]
+    Ht = np.array([
+        [1, 0, t[0]],
+        [0, 1, t[1]],
+        [0, 0, 1]]
+    ) # translate
+
+    result = cv.warpPerspective(img2warp, Ht.dot(H), (xmax - xmin, ymax - ymin))
+    if direct_blend == False:           # mean-blendering, this is much slower. Yet we can observe the ghost effect in here
+        offset_x, offset_y = t
+        for row_id in range(offset_y, h1 + offset_y):
+            y_base = row_id - offset_y
+            for col_id in range(offset_x, w1 + offset_x):
+                x_base = col_id - offset_x
+                if any(result[row_id, col_id]):     # non-empty: mean blendering
+                    result[row_id, col_id] = ((img_base[y_base, x_base].astype(int) + result[row_id, col_id].astype(int)) / 2).astype(np.uint8)
+                else:                               # empty: superposition
+                    result[row_id, col_id] = img_base[y_base, x_base]
+    else:
+        result[t[1]:h1 + t[1], t[0]:w1 + t[0]] = img_base
+    return result
