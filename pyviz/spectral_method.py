@@ -10,9 +10,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from utils import *
-from sys import argv
 from numpy import ndarray as Arr
 from sdp_problem import SDPSolver
+from options import get_options
 
 CENTER_PIC_ID = 3
 
@@ -106,7 +106,7 @@ def visualize_weighted(c_img: Arr, o_img: Arr, kpts_cp: list, kpts_op: list, mat
         cv.circle(out_image, p2, 5, (0, int(255 * w), 0), 1)
     imshow("weighted", out_image)
     
-def sdp_model_solve(kpts_cp: list, kpts_op: list, matches: list, weights: Arr, verbose = False, swap = True) -> Arr:
+def sdp_model_solve(kpts_cp: list, kpts_op: list, matches: list, weights: Arr, fluc = 0.5, verbose = False, swap = True) -> Arr:
     weights = weights.ravel()
     pts_c = []
     pts_o = []
@@ -123,36 +123,42 @@ def sdp_model_solve(kpts_cp: list, kpts_op: list, matches: list, weights: Arr, v
     pts_o = np.float32(pts_o)
     selected_weights = np.float32(selected_weights)
     
-    solver = SDPSolver(0.5, 0.5)
+    solver = SDPSolver(fluc, fluc)
     return solver.solve(pts_c, pts_o, selected_weights, verbose = verbose, swap = swap)
 
-        
-if __name__ == "__main__":
-    argv_len = len(argv)
-    case_idx = 1
-    img_idx = 1
-    if argv_len > 1:
-        case_idx = int(argv[1]) 
-    if argv_len > 2:
-        img_idx = int(argv[2]) 
-        
-    center_img  = visualize_equalized_hist(case_idx = case_idx, img_idx = CENTER_PIC_ID)
-    other_img   = visualize_equalized_hist(case_idx = case_idx, img_idx = img_idx)
+# Packaged function for multi-threading / easier calling
+def spectral_method(opts):
+    # TODO: better image denoising model
+    center_img  = visualize_equalized_hist(case_idx = opts.case_idx, img_idx = CENTER_PIC_ID)
+    other_img   = visualize_equalized_hist(case_idx = opts.case_idx, img_idx = opts.img_idx)
     
     kpts_cp, feats_cp, kpts_op, feats_op, matches \
-        = get_coarse_matches(center_img, other_img, case_idx, img_idx)
-    F   = get_fundamental(case_idx, CENTER_PIC_ID, img_idx)
+        = get_coarse_matches(center_img, other_img, opts.case_idx, opts.img_idx)
+    F   = get_fundamental(opts.case_idx, CENTER_PIC_ID, opts.img_idx)
     
-    weights, ransac_mask, H = calculate_M(kpts_cp, feats_cp, kpts_op, feats_op, F, matches, threshold = 1.0)
-    visualize_weighted(center_img, other_img, kpts_cp, kpts_op, matches, weights)               # visualize segmentation
-    # visualize_weighted(center_img, other_img, kpts_cp, kpts_op, matches, ransac_mask)         # visualize RANSAC
+    weights, ransac_mask, H = calculate_M(
+        kpts_cp, feats_cp, kpts_op, feats_op, F, matches, 
+        threshold = opts.threshold, eps = opts.affinity_eps, f_scaler = opts.epi_weight, verbose = opts.verbose
+    )
+    
+    if opts.viz == 'ransac':
+        visualize_weighted(center_img, other_img, kpts_cp, kpts_op, matches, ransac_mask)           # visualize RANSAC mask
+    elif opts.viz == 'spectral':
+        visualize_weighted(center_img, other_img, kpts_cp, kpts_op, matches, weights)               # visualize spectral score
 
-    H_sdp = sdp_model_solve(kpts_cp, kpts_op, matches, ransac_mask, verbose = True)
-    print("Ground truth homography: ", H.ravel())
+    H_sdp = sdp_model_solve(kpts_cp, kpts_op, matches, ransac_mask, fluc = opts.fluc, verbose = opts.verbose)
+
+    if opts.verbose:
+        print("Ground truth homography: ", H.ravel())
     
-    center_img_nc, other_img_nc = get_no_scat_img(case_idx, img_idx, CENTER_PIC_ID)
+    if opts.save_warpped:
+        center_img_nc, other_img_nc = get_no_scat_img(opts.case_idx, opts.img_idx, CENTER_PIC_ID)
+        warpped_baseline = image_warping(center_img_nc, other_img_nc, H, False)
+        warpped_sdp      = image_warping(center_img_nc, other_img_nc, H_sdp, False)
+        cv.imwrite("./output/sdp.png", warpped_sdp)
+        cv.imwrite("./output/baseline.png", warpped_baseline)
+        
+if __name__ == "__main__":
+    opts = get_options()
+    spectral_method(opts)
     
-    warpped_baseline = image_warping(center_img_nc, other_img_nc, H, False)
-    warpped_sdp      = image_warping(center_img_nc, other_img_nc, H_sdp, False)
-    cv.imwrite("./output/sdp.png", warpped_sdp)
-    cv.imwrite("./output/baseline.png", warpped_baseline)

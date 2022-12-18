@@ -58,6 +58,10 @@ def get_features(case_idx: int = 1, pic_id: int = 1, center_id: int = 3):
     raw_kpts_cp = feat_mat[:2, :].T                # raw keypoints of the center pictures, discarding the homogeneous dim
     return raw_kpts_cp, raw_kpts_op
 
+def save2mat(path: str, arr: np.ndarray, name: str = 'sift_feature'):
+    mat_file_path = f"./output/{path}.mat"
+    scipy.io.savemat(mat_file_path, {name: arr})
+
 # ============================== IO Utilities ==================================
 
 

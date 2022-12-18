@@ -13,11 +13,19 @@ from utils import *
 
 CENTER_PIC_ID = 3
     
-def visualize_feature_pairs(center_img: np.ndarray, other_img: np.ndarray, case_idx: int = 1, pic_id: int = 1, disp = False, swap = True):
+def visualize_feature_pairs(
+    center_img: np.ndarray, other_img: np.ndarray, 
+    case_idx: int = 1, pic_id: int = 1, 
+    disp = False, swap = True, savemat = False
+):
     out_image = np.concatenate((center_img, other_img), axis = 1)
 
     raw_kpts_cp, raw_kpts_op = get_features(case_idx, pic_id, CENTER_PIC_ID)
-    kpts_cp, _, kpts_op, _, matches = coarse_matching(center_img, other_img, raw_kpts_cp, raw_kpts_op)
+    kpts_cp, feats_cp, kpts_op, feats_op, matches = coarse_matching(center_img, other_img, raw_kpts_cp, raw_kpts_op)
+
+    if savemat:
+        save2mat('feats_cp', feats_cp)
+        save2mat('feats_op', feats_op)
     
     print(f"Coarse matching result: {len(matches)}")
     
@@ -66,7 +74,7 @@ if __name__ == "__main__":
         
     center_img = visualize_equalized_hist(case_idx = case_idx, img_idx = CENTER_PIC_ID)
     other_img = visualize_equalized_hist(case_idx = case_idx, img_idx = img_idx)
-    _, _, H = visualize_feature_pairs(center_img, other_img, case_idx = case_idx, pic_id = img_idx, disp = True)
+    _, _, H = visualize_feature_pairs(center_img, other_img, case_idx = case_idx, pic_id = img_idx, disp = True, savemat = True)
     
     center_img_nc, other_img_nc = get_no_scat_img(case_idx, img_idx, CENTER_PIC_ID)
     visualize_warpped_result(other_img_nc, center_img_nc, H, direct_blend = False)
