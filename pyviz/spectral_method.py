@@ -5,13 +5,15 @@
     @date: 2022-12-14
 """
 
+__all__ = ['spectral_method']
+
 import cv2 as cv
 import numpy as np
 import matplotlib.pyplot as plt
 
 from utils import *
 from numpy import ndarray as Arr
-from sdp_problem import SDPSolver
+from sdp_problem import SDPSolver, LMSSolver
 from options import get_options
 
 CENTER_PIC_ID = 3
@@ -123,7 +125,7 @@ def sdp_model_solve(kpts_cp: list, kpts_op: list, matches: list, weights: Arr, f
     pts_o = np.float32(pts_o)
     selected_weights = np.float32(selected_weights)
     
-    solver = SDPSolver(fluc, fluc)
+    solver = LMSSolver()
     return solver.solve(pts_c, pts_o, selected_weights, verbose = verbose, swap = swap)
 
 # Packaged function for multi-threading / easier calling

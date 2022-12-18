@@ -1,6 +1,11 @@
 
 echo "This is a shell script converting all the Chinese folder names into English ones.";
 
+if [ ! -d "./pyviz/output/" ]; then
+    echo "Directory: './pyviz/output/' does not exist. Creating... "
+    mkdir -p ./pyviz/output/
+fi
+
 base_folder='Difficulty1_Hazy images stitching';
 if [ -d "$base_folder" ]; then
     echo "name '$base_folder' is too long and contains [space], renaming to 'diff1/'";
