@@ -21,8 +21,11 @@ def get_coarse_matches(center_img: Arr, other_img: Arr, case_idx: int = 1, pic_i
     # return --- kpts_cp, feats_cp, kpts_op, feats_op, matches
     return coarse_matching(center_img, other_img, raw_kpts_cp, raw_kpts_op)
 
-def match_RANSAC(kpts_cp: Arr, kpts_op: Arr, matches: Arr):
-    src_pts, dst_pts = cv_to_array(kpts_cp, kpts_op, matches)
+def match_RANSAC(kpts_cp: Arr, kpts_op: Arr, matches: Arr, swap = False):
+    if swap:
+        dst_pts, src_pts = cv_to_array(kpts_cp, kpts_op, matches)
+    else:
+        src_pts, dst_pts = cv_to_array(kpts_cp, kpts_op, matches)
     H, mask = cv.findHomography(src_pts, dst_pts, cv.RANSAC, 5.0)
     mask = mask.astype(np.float32)
     return H, mask.ravel()
@@ -31,8 +34,8 @@ def calculate_M(
     kpts_cp: list, feats_cp: Arr, 
     kpts_op: list, feats_op: Arr, 
     F: Arr, matches: Arr, 
-    f_scaler: float = 0.5, eps: float = 30.0, 
-    threshold: float = 0.6, verbose = False, output_ransac = True
+    f_scaler: float = 0.5, eps: float = 30.0, threshold: float = 0.6, 
+    verbose = False, swap = True, output_ransac = True
 ):
     """ 
         Calculate adjacency matrix M: diagonal part: mathcing score, off-diagonal part: consistency score
@@ -41,10 +44,11 @@ def calculate_M(
         - F: fundamental matrix for epipolar constraint score
         - matches: coarse matches produced by FLANN, f_scaler: score scaler for epipolar constraints
         - threshold: segmentation score bigger than this will be counted
+        - swap: without swap (swap = False), center_image will be warpped to the other image 
         - For loop free, as SIMD as possible via numpy
     """
     if output_ransac:
-        H, ransac_mask = match_RANSAC(kpts_cp, kpts_op, matches)
+        H, ransac_mask = match_RANSAC(kpts_cp, kpts_op, matches, swap)
     else:
         H           = None
         ransac_mask = None
@@ -102,7 +106,7 @@ def visualize_weighted(c_img: Arr, o_img: Arr, kpts_cp: list, kpts_op: list, mat
         cv.circle(out_image, p2, 5, (0, int(255 * w), 0), 1)
     imshow("weighted", out_image)
     
-def sdp_model_solve(kpts_cp: list, kpts_op: list, matches: list, weights: Arr, verbose = False) -> Arr:
+def sdp_model_solve(kpts_cp: list, kpts_op: list, matches: list, weights: Arr, verbose = False, swap = True) -> Arr:
     weights = weights.ravel()
     pts_c = []
     pts_o = []
@@ -114,14 +118,13 @@ def sdp_model_solve(kpts_cp: list, kpts_op: list, matches: list, weights: Arr, v
         pts_c.append([xc, yc])
         pts_o.append([xo, yo])
         selected_weights.append(w)
-        
+    
     pts_c = np.float32(pts_c)
     pts_o = np.float32(pts_o)
     selected_weights = np.float32(selected_weights)
     
     solver = SDPSolver(0.5, 0.5)
-    return solver.solve(pts_c, pts_o, selected_weights, verbose = verbose)
-
+    return solver.solve(pts_c, pts_o, selected_weights, verbose = verbose, swap = swap)
 
         
 if __name__ == "__main__":
@@ -140,7 +143,7 @@ if __name__ == "__main__":
         = get_coarse_matches(center_img, other_img, case_idx, img_idx)
     F   = get_fundamental(case_idx, CENTER_PIC_ID, img_idx)
     
-    weights, ransac_mask, H = calculate_M(kpts_cp, feats_cp, kpts_op, feats_op, F, matches)
+    weights, ransac_mask, H = calculate_M(kpts_cp, feats_cp, kpts_op, feats_op, F, matches, threshold = 1.0)
     visualize_weighted(center_img, other_img, kpts_cp, kpts_op, matches, weights)               # visualize segmentation
     # visualize_weighted(center_img, other_img, kpts_cp, kpts_op, matches, ransac_mask)         # visualize RANSAC
 
@@ -149,7 +152,7 @@ if __name__ == "__main__":
     
     center_img_nc, other_img_nc = get_no_scat_img(case_idx, img_idx, CENTER_PIC_ID)
     
-    warpped_baseline = image_warping(other_img_nc, center_img_nc, H, False)
-    warpped_sdp      = image_warping(other_img_nc, center_img_nc, H_sdp, False)
+    warpped_baseline = image_warping(center_img_nc, other_img_nc, H, False)
+    warpped_sdp      = image_warping(center_img_nc, other_img_nc, H_sdp, False)
     cv.imwrite("./output/sdp.png", warpped_sdp)
     cv.imwrite("./output/baseline.png", warpped_baseline)

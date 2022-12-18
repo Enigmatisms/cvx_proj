@@ -13,7 +13,7 @@ from utils import *
 
 CENTER_PIC_ID = 3
     
-def visualize_feature_pairs(center_img: np.ndarray, other_img: np.ndarray, case_idx: int = 1, pic_id: int = 1, disp = False):
+def visualize_feature_pairs(center_img: np.ndarray, other_img: np.ndarray, case_idx: int = 1, pic_id: int = 1, disp = False, swap = True):
     out_image = np.concatenate((center_img, other_img), axis = 1)
 
     raw_kpts_cp, raw_kpts_op = get_features(case_idx, pic_id, CENTER_PIC_ID)
@@ -26,9 +26,12 @@ def visualize_feature_pairs(center_img: np.ndarray, other_img: np.ndarray, case_
         imshow("key point matching", out_img)
         
     # params: contrastThreshold, edgeThreshold, sigma, descriptorType, see help(cv.SIFT)
-    src_pts = np.float32([ kpts_cp[m.queryIdx].pt for m in matches ]).reshape(-1,1,2)
-    dst_pts = np.float32([ kpts_op[m.trainIdx].pt for m in matches ]).reshape(-1,1,2)
+    src_pts = np.float32([ kpts_cp[m.queryIdx].pt for m in matches ])
+    dst_pts = np.float32([ kpts_op[m.trainIdx].pt for m in matches ])
     H, mask = cv.findHomography(src_pts, dst_pts, cv.RANSAC, 5.0)
+    
+    if swap:
+        H = np.linalg.inv(H)
     
     draw_params = dict(matchColor = (0, 255, 0),
                         singlePointColor = None,
@@ -41,7 +44,11 @@ def visualize_feature_pairs(center_img: np.ndarray, other_img: np.ndarray, case_
     if disp:
         imshow("key point RANSAC", out_img)
     cv.imwrite("./output/result.png", out_img)
-    return H
+    src_pts = src_pts[mask.ravel() > 0]
+    dst_pts = dst_pts[mask.ravel() > 0]
+    if swap:
+        return dst_pts, src_pts, H
+    return src_pts, dst_pts, H
 
 def visualize_warpped_result(center_img: np.ndarray, other_img: np.ndarray, H: np.ndarray, direct_blend = False):
     warped = image_warping(other_img, center_img, H, direct_blend)
@@ -59,8 +66,8 @@ if __name__ == "__main__":
         
     center_img = visualize_equalized_hist(case_idx = case_idx, img_idx = CENTER_PIC_ID)
     other_img = visualize_equalized_hist(case_idx = case_idx, img_idx = img_idx)
-    H = visualize_feature_pairs(center_img, other_img, case_idx = case_idx, pic_id = img_idx, disp = True)
+    _, _, H = visualize_feature_pairs(center_img, other_img, case_idx = case_idx, pic_id = img_idx, disp = True)
     
     center_img_nc, other_img_nc = get_no_scat_img(case_idx, img_idx, CENTER_PIC_ID)
-    visualize_warpped_result(center_img_nc, other_img_nc, H, direct_blend = False)
+    visualize_warpped_result(other_img_nc, center_img_nc, H, direct_blend = False)
     

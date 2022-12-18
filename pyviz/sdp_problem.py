@@ -30,7 +30,7 @@ class SDPSolver:
     """
         Create a semi-positive definite matrix constraint
     """
-    def solve(self, pts_c: Arr, pts_o: Arr, weights: Arr, verbose = 1):
+    def solve(self, pts_c: Arr, pts_o: Arr, weights: Arr, verbose = 1, swap = True):
         # First: re-arrange pts_c to a reasonable structure
         num_points = pts_c.shape[0]
         rare_part = -pts_o[..., None] @ pts_c[:, None, :]        # shape (N, 2, 2)
@@ -73,13 +73,18 @@ class SDPSolver:
         if verbose:
             print("Start solving...")
         problem.solve()
-        if verbose:
-            print(f"Problem solved. Time consumption: {time.time() - start_time:.3f}")
-            print("The optimal value is", problem.value)
-            print("Optimal solution:", self.h.value.ravel())
+        end_time = time.time()
         solution = np.ones(9, dtype = np.float32)
         solution[:-1] = self.h.value.ravel()
-        return solution.reshape(3, 3)
+        solution = solution.reshape(3, 3)
+        
+        if swap:
+            solution = np.linalg.inv(solution)
+        if verbose:
+            print(f"Problem solved. Time consumption: {end_time - start_time:.3f}")
+            print("The optimal value is", solution.ravel())
+            print("Optimal solution:", self.h.value.ravel())
+        return solution
     
 def validation_test():
     pts_c = np.random.rand(20, 2)

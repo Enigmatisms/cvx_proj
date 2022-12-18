@@ -108,7 +108,7 @@ def image_warping(img_base: np.ndarray, img2warp: np.ndarray, H: np.ndarray, dir
             for col_id in range(offset_x, w1 + offset_x):
                 x_base = col_id - offset_x
                 if any(result[row_id, col_id]):     # non-empty: mean blendering
-                    result[row_id, col_id] = ((img_base[y_base, x_base].astype(int) + result[row_id, col_id].astype(int)) / 2).astype(np.uint8)
+                    result[row_id, col_id] = ((img_base[y_base, x_base].astype(np.float32) + result[row_id, col_id].astype(np.float32)) / 2.).astype(np.uint8)
                 else:                               # empty: superposition
                     result[row_id, col_id] = img_base[y_base, x_base]
     else:
@@ -140,6 +140,7 @@ def coarse_matching(c_img: np.ndarray, o_img: np.ndarray, raw_kpts_cp: np.ndarra
     return kpts_cp, feats_cp, kpts_op, feats_op, matches
 
 # ============================ Transform utilities =============================
+
 
 # ================================ Mathematical utilities ====================================
 def skew_symmetric_transform(t: np.ndarray):
