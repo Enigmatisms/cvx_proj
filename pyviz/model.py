@@ -13,8 +13,9 @@ from numpy import ndarray as Arr
 __all__ = ['SDPSolver', 'LMSSolver']
 
 class LMSSolver:
-    def __init__(self, huber_param = -1.0) -> None:
+    def __init__(self, max_iter, huber_param = -1.0) -> None:
         self.huber_param = huber_param
+        self.max_iter = max_iter
         self.h = cp.Variable((8, 1))    # homography
 
     @staticmethod
@@ -42,7 +43,8 @@ class LMSSolver:
             problem = cp.Problem(cp.Minimize(cp.sum((A @ self.h - rhs) ** 2)))
         start_time = time.time()
         if verbose:
-            print(f"Start solving... Huber Loss Used = [{self.huber_param > 1e-2}]")
+            print(f"Start solving... point num: {num_points}. Huber Loss Used = [{self.huber_param > 1e-2}]")
+
         problem.solve()
         end_time = time.time()
         solution = np.ones(9, dtype = np.float32)
@@ -51,15 +53,16 @@ class LMSSolver:
         
         if swap:
             solution = np.linalg.inv(solution)
+            solution /= solution[-1, -1]
         if verbose:
             print(f"Problem solved. Time consumption: {end_time - start_time:.3f}")
             print("The optimal value is", problem.value)
-            print("Optimal solution:", self.h.value.ravel())
+            print("Optimal solution:", solution.ravel())
         return solution
 
 class SDPSolver(LMSSolver):
-    def __init__(self, du = 1.0, dv = 1.0) -> None:
-        super().__init__(-1.0)
+    def __init__(self, max_iter, du = 1.0, dv = 1.0) -> None:
+        super().__init__(max_iter, -1.0)
         self.du = du
         self.dv = dv
 
@@ -80,14 +83,12 @@ class SDPSolver(LMSSolver):
         rhs = pts_o.reshape(-1, 1) * weights
 
         u_pmatrix = np.repeat(np.float32([[self.du, 0]]), repeats = num_points, axis = 0)
-        # FIXME: this seems to have some minor problems (should be related to self.du)
-        u_rare    = np.hstack((-pts_o.reshape(-1, 1), np.zeros((num_points << 1, 1))))
+        u_rare    = np.hstack((-pts_o.reshape(-1, 1), np.zeros((num_points << 1, 1)))) * self.du
         u_front   = SDPSolver.get_shifted(u_pmatrix, num_points, 0.0).reshape(-1, 6)
         A1 = np.concatenate([u_front, u_rare], axis = -1) * weights
         
         v_pmatrix = np.repeat(np.float32([[0, self.dv]]), repeats = num_points, axis = 0)
-        # FIXME: this seems to have some minor problems (should be related to self.du)
-        v_rare    = np.hstack((np.zeros((num_points << 1, 1)), -pts_o.reshape(-1, 1)))
+        v_rare    = np.hstack((np.zeros((num_points << 1, 1)), -pts_o.reshape(-1, 1))) * self.dv
         v_front   = SDPSolver.get_shifted(v_pmatrix, num_points, 0.0).reshape(-1, 6)
         A2 = np.concatenate([v_front, v_rare], axis = -1) * weights
 
@@ -110,8 +111,8 @@ class SDPSolver(LMSSolver):
         problem = cp.Problem(cp.Minimize(self.t + self.r), [constraint_matrix >> 0])
         start_time = time.time()
         if verbose:
-            print("Start solving SDP Problem...")
-        problem.solve()
+            print(f"Start solving SDP Problem... point num: {num_points}")
+        problem.solve(solver = 'SCS', max_iters = self.max_iter)
         end_time = time.time()
         solution = np.ones(9, dtype = np.float32)
         solution[:-1] = self.h.value.ravel()
@@ -119,10 +120,11 @@ class SDPSolver(LMSSolver):
         
         if swap:
             solution = np.linalg.inv(solution)
+            solution /= solution[-1, -1]
         if verbose:
             print(f"Problem solved. Time consumption: {end_time - start_time:.3f}")
             print("The optimal value is", problem.value)
-            print("Optimal solution:", self.h.value.ravel())
+            print("Optimal solution:", solution.ravel())
         return solution
     
 def validation_test():

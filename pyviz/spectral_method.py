@@ -108,7 +108,7 @@ def visualize_weighted(c_img: Arr, o_img: Arr, kpts_cp: list, kpts_op: list, mat
         cv.circle(out_image, p2, 5, (0, int(255 * w), 0), 1)
     imshow("weighted", out_image)
     
-def model_solve(kpts_cp: list, kpts_op: list, matches: list, weights: Arr, param = 0.5, verbose = False, swap = True, lms = True) -> Arr:
+def model_solve(kpts_cp: list, kpts_op: list, matches: list, weights: Arr, param = 0.5, max_iter = 8000, verbose = False, swap = True, lms = True) -> Arr:
     weights = weights.ravel()
     pts_c = []
     pts_o = []
@@ -126,9 +126,9 @@ def model_solve(kpts_cp: list, kpts_op: list, matches: list, weights: Arr, param
     selected_weights = np.float32(selected_weights)
     
     if lms:
-        solver = LMSSolver(param)
+        solver = LMSSolver(max_iter, param)
     else:   
-        solver = SDPSolver(param, param)
+        solver = SDPSolver(max_iter, param, param)
     return solver.solve(pts_c, pts_o, selected_weights, verbose = verbose, swap = swap)
 
 # Packaged function for multi-threading / easier calling
@@ -150,8 +150,8 @@ def spectral_method(opts):
         visualize_weighted(center_img, other_img, kpts_cp, kpts_op, matches, ransac_mask)           # visualize RANSAC mask
     elif opts.viz == 'spectral':
         visualize_weighted(center_img, other_img, kpts_cp, kpts_op, matches, weights)               # visualize spectral score
-
-    H_pred = model_solve(kpts_cp, kpts_op, matches, ransac_mask, param = opts.huber_param if opts.lms else opts.fluc, verbose = opts.verbose, lms = opts.lms)
+    param = opts.huber_param if opts.lms else opts.fluc
+    H_pred = model_solve(kpts_cp, kpts_op, matches, ransac_mask, param = param, max_iter = opts.max_iter, verbose = opts.verbose, lms = opts.lms)
 
     if opts.verbose:
         print("Ground truth homography: ", H.ravel())
@@ -165,6 +165,8 @@ def spectral_method(opts):
         cv.imwrite("./output/baseline.png", warpped_baseline)
 
     if opts.save_hmat:
+        H_pred = np.linalg.inv(H_pred).astype(np.float64)       # Out put inversed
+        H_pred /= H_pred[-1, -1]
         save2mat(f"case{opts.case_idx}/H3{opts.img_idx}", H_pred, name = 'H', prefix = "../diff_1/results/")
         
 if __name__ == "__main__":
