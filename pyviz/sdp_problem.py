@@ -38,7 +38,6 @@ class LMSSolver:
         if verbose:
             print("Start solving...")
         problem.solve()
-        print(problem.value)
         end_time = time.time()
         solution = np.ones(9, dtype = np.float32)
         solution[:-1] = self.h.value.ravel()

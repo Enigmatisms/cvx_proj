@@ -108,7 +108,7 @@ def visualize_weighted(c_img: Arr, o_img: Arr, kpts_cp: list, kpts_op: list, mat
         cv.circle(out_image, p2, 5, (0, int(255 * w), 0), 1)
     imshow("weighted", out_image)
     
-def sdp_model_solve(kpts_cp: list, kpts_op: list, matches: list, weights: Arr, fluc = 0.5, verbose = False, swap = True) -> Arr:
+def sdp_model_solve(kpts_cp: list, kpts_op: list, matches: list, weights: Arr, param = 0.5, verbose = False, swap = True) -> Arr:
     weights = weights.ravel()
     pts_c = []
     pts_o = []
@@ -159,6 +159,9 @@ def spectral_method(opts):
         warpped_sdp      = image_warping(center_img_nc, other_img_nc, H_sdp, False)
         cv.imwrite("./output/sdp.png", warpped_sdp)
         cv.imwrite("./output/baseline.png", warpped_baseline)
+
+    if opts.save_hmat:
+        save2mat(f"case{opts.case_idx}/H3{opts.img_idx}", H_sdp, name = 'H', prefix = "../diff_1/results/")
         
 if __name__ == "__main__":
     opts = get_options()
