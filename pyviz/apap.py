@@ -153,10 +153,6 @@ class APAP:
                 weight[weight < self.gamma] = self.gamma
                 local_weight[i, j, :] = weight
                 
-                # what we should do is to replace this place
-                # if we are to compute one SDP at a time, which will be extremely time consuming
-                # multi-processing acceleration might be used
-                # re-weighting the rows using distance
                 A = np.expand_dims(np.repeat(weight, 2), -1) * aa
                 _, _, V = cv.SVDecomp(A)
                 h = V[-1, :]

@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 
 from utils import *
 from numpy import ndarray as Arr
-from model import SDPSolver, LMSSolver
+from model import LMSSolver
 from options import get_options
 
 CENTER_PIC_ID = 3
@@ -108,7 +108,7 @@ def visualize_weighted(c_img: Arr, o_img: Arr, kpts_cp: list, kpts_op: list, mat
         cv.circle(out_image, p2, 5, (0, int(255 * w), 0), 1)
     imshow("weighted", out_image)
     
-def model_solve(kpts_cp: list, kpts_op: list, matches: list, weights: Arr, param = 0.5, verbose = False, swap = True, lms = True) -> Arr:
+def model_solve(kpts_cp: list, kpts_op: list, matches: list, weights: Arr, param = 0.5, verbose = False, swap = True) -> Arr:
     weights = weights.ravel()
     pts_c = []
     pts_o = []
@@ -125,10 +125,7 @@ def model_solve(kpts_cp: list, kpts_op: list, matches: list, weights: Arr, param
     pts_o = np.float32(pts_o)
     selected_weights = np.float32(selected_weights)
     
-    if lms:
-        solver = LMSSolver(param)
-    else:   
-        solver = SDPSolver(param, param)
+    solver = LMSSolver(param)
     return solver.solve(pts_c, pts_o, selected_weights, verbose = verbose, swap = swap)
 
 # Packaged function for multi-threading / easier calling
@@ -151,7 +148,7 @@ def spectral_method(opts):
     elif opts.viz == 'spectral':
         visualize_weighted(center_img, other_img, kpts_cp, kpts_op, matches, weights)               # visualize spectral score
 
-    H_pred = model_solve(kpts_cp, kpts_op, matches, ransac_mask, param = opts.huber_param if opts.lms else opts.fluc, verbose = opts.verbose, lms = opts.lms)
+    H_pred = model_solve(kpts_cp, kpts_op, matches, ransac_mask, param = opts.huber_param, verbose = opts.verbose)
 
     if opts.verbose:
         print("Ground truth homography: ", H.ravel())
@@ -160,8 +157,7 @@ def spectral_method(opts):
         center_img_nc, other_img_nc = get_no_scat_img(opts.case_idx, opts.img_idx, CENTER_PIC_ID)
         warpped_baseline = image_warping(center_img_nc, other_img_nc, H, False)
         warpped_result   = image_warping(center_img_nc, other_img_nc, H_pred, False)
-        name = "lms" if opts.lms else "sdp"
-        cv.imwrite(f"./output/{name}.png", warpped_result)
+        cv.imwrite(f"./output/lms.png", warpped_result)
         cv.imwrite("./output/baseline.png", warpped_baseline)
         
 if __name__ == "__main__":
