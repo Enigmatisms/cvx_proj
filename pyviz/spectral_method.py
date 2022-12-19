@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 
 from utils import *
 from numpy import ndarray as Arr
-from sdp_problem import SDPSolver, LMSSolver
+from model import SDPSolver, LMSSolver
 from options import get_options
 
 CENTER_PIC_ID = 3
@@ -108,7 +108,7 @@ def visualize_weighted(c_img: Arr, o_img: Arr, kpts_cp: list, kpts_op: list, mat
         cv.circle(out_image, p2, 5, (0, int(255 * w), 0), 1)
     imshow("weighted", out_image)
     
-def sdp_model_solve(kpts_cp: list, kpts_op: list, matches: list, weights: Arr, param = 0.5, verbose = False, swap = True) -> Arr:
+def model_solve(kpts_cp: list, kpts_op: list, matches: list, weights: Arr, param = 0.5, verbose = False, swap = True, lms = True) -> Arr:
     weights = weights.ravel()
     pts_c = []
     pts_o = []
@@ -125,7 +125,10 @@ def sdp_model_solve(kpts_cp: list, kpts_op: list, matches: list, weights: Arr, p
     pts_o = np.float32(pts_o)
     selected_weights = np.float32(selected_weights)
     
-    solver = LMSSolver()
+    if lms:
+        solver = LMSSolver(param)
+    else:   
+        solver = SDPSolver(param, param)
     return solver.solve(pts_c, pts_o, selected_weights, verbose = verbose, swap = swap)
 
 # Packaged function for multi-threading / easier calling
@@ -140,15 +143,15 @@ def spectral_method(opts):
     
     weights, ransac_mask, H = calculate_M(
         kpts_cp, feats_cp, kpts_op, feats_op, F, matches, 
-        threshold = opts.threshold, eps = opts.affinity_eps, f_scaler = opts.epi_weight, verbose = opts.verbose
-    )
+        threshold = opts.threshold, eps = opts.affinity_eps, f_scaler = opts.epi_weight, verbose = False
+    )           # To visualize the result of Affinity Matrix calculation, make verbose True
     
     if opts.viz == 'ransac':
         visualize_weighted(center_img, other_img, kpts_cp, kpts_op, matches, ransac_mask)           # visualize RANSAC mask
     elif opts.viz == 'spectral':
         visualize_weighted(center_img, other_img, kpts_cp, kpts_op, matches, weights)               # visualize spectral score
 
-    H_sdp = sdp_model_solve(kpts_cp, kpts_op, matches, ransac_mask, fluc = opts.fluc, verbose = opts.verbose)
+    H_pred = model_solve(kpts_cp, kpts_op, matches, ransac_mask, param = opts.huber_param if opts.lms else opts.fluc, verbose = opts.verbose, lms = opts.lms)
 
     if opts.verbose:
         print("Ground truth homography: ", H.ravel())
@@ -156,12 +159,13 @@ def spectral_method(opts):
     if opts.save_warpped:
         center_img_nc, other_img_nc = get_no_scat_img(opts.case_idx, opts.img_idx, CENTER_PIC_ID)
         warpped_baseline = image_warping(center_img_nc, other_img_nc, H, False)
-        warpped_sdp      = image_warping(center_img_nc, other_img_nc, H_sdp, False)
-        cv.imwrite("./output/sdp.png", warpped_sdp)
+        warpped_result   = image_warping(center_img_nc, other_img_nc, H_pred, False)
+        name = "lms" if opts.lms else "sdp"
+        cv.imwrite(f"./output/{name}.png", warpped_result)
         cv.imwrite("./output/baseline.png", warpped_baseline)
 
     if opts.save_hmat:
-        save2mat(f"case{opts.case_idx}/H3{opts.img_idx}", H_sdp, name = 'H', prefix = "../diff_1/results/")
+        save2mat(f"case{opts.case_idx}/H3{opts.img_idx}", H_pred, name = 'H', prefix = "../diff_1/results/")
         
 if __name__ == "__main__":
     opts = get_options()

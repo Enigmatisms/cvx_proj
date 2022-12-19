@@ -1,6 +1,6 @@
 #-*-coding:utf-8-*-
 """
-    SDP dual problem for Robust MMSE
+    LMS with optional Huber Loss / SDP dual problem for Robust MMSE
     @author: Qianyue He
     @date: 2022-12-16
 """
@@ -12,9 +12,9 @@ from numpy import ndarray as Arr
 
 __all__ = ['SDPSolver', 'LMSSolver']
 
-
 class LMSSolver:
-    def __init__(self) -> None:
+    def __init__(self, huber_param = -1.0) -> None:
+        self.huber_param = huber_param
         self.h = cp.Variable((8, 1))    # homography
 
     @staticmethod
@@ -27,16 +27,22 @@ class LMSSolver:
     def solve(self, pts_c: Arr, pts_o: Arr, weights: Arr, verbose = 1, swap = True):
         num_points = pts_c.shape[0]
         rare_part = -pts_o[..., None] @ pts_c[:, None, :]        # shape (N, 2, 2)
-        front_part = SDPSolver.get_shifted(pts_c, num_points)
+        front_part = LMSSolver.get_shifted(pts_c, num_points)
         weights = np.repeat(weights[..., None], repeats = 2, axis = -1).reshape(-1, 1)      # make [1, 2, 3] -> [[1], [1], [2], [2], [3], [3]] -- shape (2N, 1)
 
         A = np.concatenate([front_part, rare_part], axis = -1).reshape(-1, 8) * weights # shape (2N, 8)
         rhs = pts_o.reshape(-1, 1) * weights
-
-        problem = cp.Problem(cp.Minimize(cp.sum((A @ self.h - rhs) ** 2)))
+        if self.huber_param > 1e-2:         # valid huber param
+            loss = 0
+            diff = A @ self.h - rhs
+            for item in diff:
+                loss += cp.huber(item, self.huber_param)
+            problem = cp.Problem(cp.Minimize(loss))
+        else:
+            problem = cp.Problem(cp.Minimize(cp.sum((A @ self.h - rhs) ** 2)))
         start_time = time.time()
         if verbose:
-            print("Start solving...")
+            print(f"Start solving... Huber Loss Used = [{self.huber_param > 1e-2}]")
         problem.solve()
         end_time = time.time()
         solution = np.ones(9, dtype = np.float32)
@@ -53,6 +59,7 @@ class LMSSolver:
 
 class SDPSolver(LMSSolver):
     def __init__(self, du = 1.0, dv = 1.0) -> None:
+        super().__init__(-1.0)
         self.du = du
         self.dv = dv
 
@@ -103,7 +110,7 @@ class SDPSolver(LMSSolver):
         problem = cp.Problem(cp.Minimize(self.t + self.r), [constraint_matrix >> 0])
         start_time = time.time()
         if verbose:
-            print("Start solving...")
+            print("Start solving SDP Problem...")
         problem.solve()
         end_time = time.time()
         solution = np.ones(9, dtype = np.float32)
