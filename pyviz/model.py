@@ -12,7 +12,6 @@ from numpy import ndarray as Arr
 
 __all__ = ['SDPSolver', 'LMSSolver']
 
-
 class LMSSolver:
     def __init__(self, huber_param = -1.0) -> None:
         self.huber_param = huber_param

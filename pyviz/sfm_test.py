@@ -25,9 +25,6 @@ def has_affinity(res_src_pts: list, pt: np.ndarray) -> int:
             return i
     return -1
 
-# Read Rotation, Translation and Intrinsic Matrix
-
-
 def match_all(case_idx: int, debug_disp: bool = False, verbose: bool = False):
     # Data preparation
     mat_file_path = f"{get_base_path(case_idx)}/keypoints.mat"
@@ -149,12 +146,13 @@ def covid_3d_optimize(covid, res_src_pts, all_dst_pts, case_idx = 1, visualize =
             img_idx = j if j < CENTER_PIC_ID - 1 else j + 1
             
             pix_coords.append(all_dst_pts[j][idx].reshape(2, 1))
-            # pix_coords.append(np.float32([[384], [384]]))
             M_rot.append(Rs[img_idx])
-            # M_rot.append(Rs[img_idx])
             origins.append(ts[img_idx].reshape(-1, 1))
-            # origins.append(ts[img_idx].reshape(-1, 1))
             cam_ids.append(img_idx + 1)
+            # Ray for camera center pixel
+            # pix_coords.append(np.float32([[384], [384]]))
+            # M_rot.append(Rs[img_idx])
+            # origins.append(ts[img_idx].reshape(-1, 1))
             # cam_ids.append(img_idx + 1)
         pix         = np.stack(pix_coords,  axis = 0)
         M_rots      = np.stack(M_rot,       axis = 0)
@@ -179,8 +177,6 @@ def covid_3d_optimize(covid, res_src_pts, all_dst_pts, case_idx = 1, visualize =
     
 
 if __name__ == "__main__":
-    # path = f"{get_base_path(1)}/Parameters.xlsx"
-    # read_rot_trans_int(path)
     case_idx = 1
     imgs, all_src_pts, all_dst_pts, all_matches = match_all(case_idx, False, False)
     res_src_pts, covid = get_covid(all_src_pts, all_matches)
