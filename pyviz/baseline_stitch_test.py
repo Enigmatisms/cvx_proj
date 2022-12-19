@@ -12,6 +12,8 @@ from sys import argv
 from utils import *
 
 CENTER_PIC_ID = 3
+
+__all__ = ['visualize_feature_pairs']
     
 def visualize_feature_pairs(
     center_img: np.ndarray, other_img: np.ndarray, 
