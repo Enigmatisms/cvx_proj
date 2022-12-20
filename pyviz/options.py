@@ -11,7 +11,8 @@ def get_options(delayed_parse = False):
     parser.add_argument("-s", "--save_warpped", default = False, action = "store_true", help = "Save warpped images for visualization")
     parser.add_argument("-m", "--save_hmat",    default = False, action = "store_true", help = "Save Homography mat for matlab evaluation")
     parser.add_argument("--lms",                default = False, action = "store_true", help = "Use LMS solver for the model")
-    parser.add_argument("--viz",                default = 'none', choices=['ransac', 'spectral', 'none'], help = "Visualization mode")
+    parser.add_argument("--viz_kpt",            default = 'save', choices=['save_quit', 'save', 'none'], help = "Visualize keypoint distribution")
+    parser.add_argument("--viz",                default = 'ransac', choices=['ransac', 'spectral', 'weight_only'], help = "Visualization mode")
 
     # asymmetrical loss parameters
     parser.add_argument("--affinity_eps",   type = float, default = 30.0, help = "Sigma distance of allowed spatial inconsistency")

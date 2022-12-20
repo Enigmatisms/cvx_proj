@@ -80,7 +80,7 @@ def imshow(name: str, pic: np.ndarray):
         if key > 0:
             cv.destroyAllWindows()
             return key == 27
-        
+
 def visualize_equalized_hist(case_idx = 1, img_idx = 3, disp = False):
     img_path = get_path(case_idx, img_idx)
     img = cv.imread(img_path)

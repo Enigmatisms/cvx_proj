@@ -50,10 +50,12 @@ def calculate_M(
         - For loop free, as SIMD as possible via numpy
     """
     if output_ransac:
-        H, ransac_mask = match_RANSAC(kpts_cp, kpts_op, matches, swap)
+        H, ransac_mask  = match_RANSAC(kpts_cp, kpts_op, matches, swap)
+        original_mask   = ransac_mask.copy()
     else:
-        H           = None
-        ransac_mask = None
+        H               = None
+        ransac_mask     = None
+        original_mask   = None
     num_matches = len(matches)
     M = np.zeros((num_matches, num_matches))
     
@@ -92,21 +94,28 @@ def calculate_M(
     bool_mask = segment > threshold
     ransac_mask *= threshold
     ransac_mask[bool_mask] = segment[bool_mask]     # array thresholding
-    return segment, ransac_mask, H
+    return segment, H, ransac_mask, original_mask
     
-def visualize_weighted(c_img: Arr, o_img: Arr, kpts_cp: list, kpts_op: list, matches: list, weight: Arr):
+def visualize_weighted(c_img: Arr, o_img: Arr, kpts_cp: list, kpts_op: list, matches: list, weight: Arr, draw_zero_w = False, disp = False):
     offset_x = c_img.shape[1]
     out_image = np.concatenate((c_img, o_img), axis = 1)
     for m, w in zip(matches, weight):
-        if w <= 1e-3: continue
+        minor_weight = w <= 1e-3
+        if minor_weight and not draw_zero_w: continue
         xc, yc = kpts_cp[m.queryIdx].pt
         xo, yo = kpts_op[m.trainIdx].pt
         p1 = np.int32([xc, yc])
         p2 = np.int32([xo + offset_x, yo])
-        cv.line(out_image, p1, p2, (0, int(255 * w), 0), 1)
-        cv.circle(out_image, p1, 5, (0, int(255 * w), 0), 1)
-        cv.circle(out_image, p2, 5, (0, int(255 * w), 0), 1)
-    imshow("weighted", out_image)
+        if minor_weight:
+            cv.circle(out_image, p1, 4, (0, 0, 255), 2)
+            cv.circle(out_image, p2, 4, (0, 0, 255), 2)
+        else:
+            cv.line(out_image, p1, p2, (0, int(255 * w), 0), 2)
+            cv.circle(out_image, p1, 4, (0, int(255 * w), 0), 2)
+            cv.circle(out_image, p2, 4, (0, int(255 * w), 0), 2)
+    if disp:
+        imshow("weighted", out_image)
+    return out_image
     
 def model_solve(kpts_cp: list, kpts_op: list, matches: list, weights: Arr, param = 0.5, max_iter = 8000, verbose = False, swap = True, lms = True) -> Arr:
     weights = weights.ravel()
@@ -141,15 +150,22 @@ def spectral_method(opts):
         = get_coarse_matches(center_img, other_img, opts.case_idx, opts.img_idx)
     F   = get_fundamental(opts.case_idx, CENTER_PIC_ID, opts.img_idx)
     
-    weights, ransac_mask, H = calculate_M(
+    weights, H, ransac_mask, original_mask = calculate_M(
         kpts_cp, feats_cp, kpts_op, feats_op, F, matches, 
         threshold = opts.threshold, eps = opts.affinity_eps, f_scaler = opts.epi_weight, verbose = False
     )           # To visualize the result of Affinity Matrix calculation, make verbose True
-    
-    if opts.viz == 'ransac':
-        visualize_weighted(center_img, other_img, kpts_cp, kpts_op, matches, ransac_mask)           # visualize RANSAC mask
-    elif opts.viz == 'spectral':
-        visualize_weighted(center_img, other_img, kpts_cp, kpts_op, matches, weights)               # visualize spectral score
+
+    if 'save' in opts.viz_kpt:
+        viz_mask = ransac_mask                         # visualize RANSAC mask with spectral score
+        if opts.viz == 'ransac':                       # visualize RANSAC mask
+            viz_mask = original_mask
+        elif opts.viz == 'weight_only':                # visualize spectral score
+            viz_mask = weights
+        center_img_nc, other_img_nc = get_no_scat_img(opts.case_idx, opts.img_idx, CENTER_PIC_ID)
+        out_image = visualize_weighted(center_img_nc, other_img_nc, kpts_cp, kpts_op, matches, viz_mask, True)
+        cv.imwrite(f"./output/case_{opts.case_idx}/kpts_viz_{opts.img_idx}.png",  out_image)
+        if opts.viz_kpt == 'save_quit':
+            return                          # do not solve the model, just visualize matches
     param = opts.huber_param if opts.lms else opts.fluc
     H_pred = model_solve(kpts_cp, kpts_op, matches, ransac_mask, param = param, max_iter = opts.max_iter, verbose = opts.verbose, lms = opts.lms)
 
@@ -161,14 +177,21 @@ def spectral_method(opts):
         warpped_baseline = image_warping(center_img_nc, other_img_nc, H, False)
         warpped_result   = image_warping(center_img_nc, other_img_nc, H_pred, False)
         name = "lms" if opts.lms else "sdp"
-        cv.imwrite(f"./output/{name}.png", warpped_result)
-        cv.imwrite("./output/baseline.png", warpped_baseline)
+        cv.imwrite(f"./output/case_{opts.case_idx}/{name}_{opts.img_idx}.png",  warpped_result)
+        cv.imwrite(f"./output/case_{opts.case_idx}/baseline_{opts.img_idx}.png",warpped_baseline)
 
     if opts.save_hmat:
         H_pred = np.linalg.inv(H_pred).astype(np.float64)       # Out put inversed
         H_pred /= H_pred[-1, -1]
         save2mat(f"case{opts.case_idx}/H3{opts.img_idx}", H_pred, name = 'H', prefix = "../diff_1/results/")
         
+
+""" 
+    TODO: 
+    - parameter fine tuning and parameter reading (from file)
+    - Analysis of the keypoint distribution
+    - Take another look at APAP
+"""
 if __name__ == "__main__":
     opts = get_options()
     spectral_method(opts)
