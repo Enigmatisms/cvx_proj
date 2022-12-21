@@ -32,12 +32,44 @@ def match_RANSAC(kpts_cp: Arr, kpts_op: Arr, matches: Arr, swap = False):
     mask = mask.astype(np.float32)
     return H, mask.ravel()
 
+def recompute_matching(
+    kpts_cp: list, feats_cp: Arr, 
+    kpts_op: list, feats_op: Arr, 
+    matches: list, H: Arr, 
+    radius = 6., score_thresh = 0.4
+) -> Arr:
+    """
+        Using merely opencv RANSAC may lead to degraded result: 
+        - SIFT descriptor not similar enough but warped points are actually close
+        - Therefore, after computing the global Homography, we should recompute the matches
+        - and start all over. Kind of feels like E-M algorithm
+        
+        args:
+        - kpts_cp, kpts_op: keypoints on center / the other image
+        - feats_cp, feats_op: SIFT features on center / the other image
+        - matches: coarse matches
+        - H: estimated global homography matrix
+        - radius: two points, if the dist between each other after warping is within radius, then valid match
+        - score_thresh: SIFT features should be similar enough
+    """
+    mask = np.zeros(len(matches), dtype = np.float32)
+    for i, m in enumerate(matches):
+        feat_c, feat_o = normalized_feature(feats_cp, feats_op, m)
+        kpt_c = np.float32(kpts_cp[m.queryIdx].pt)
+        kpt_o = np.matmul(H, np.float32((*kpts_op[m.trainIdx].pt, 1)))       # make homogeneous -> warp -> inhomogeneous
+        kpt_o = (kpt_o / kpt_o[2])[:-1]
+        dist = np.linalg.norm(kpt_o - kpt_c)
+        feat_score = np.sum(feat_c * feat_o)
+        if dist < radius and feat_score > score_thresh:
+            mask[i] = 1.
+    return mask
+
 def calculate_M(
     kpts_cp: list, feats_cp: Arr, 
     kpts_op: list, feats_op: Arr, 
     F: Arr, matches: Arr, 
     f_scaler: float = 0.5, eps: float = 30.0, threshold: float = 0.6, 
-    verbose = False, swap = True, output_ransac = True
+    verbose = False, swap = True, init_ransac = True, Hg = None
 ):
     """ 
         Calculate adjacency matrix M: diagonal part: mathcing score, off-diagonal part: consistency score
@@ -47,10 +79,16 @@ def calculate_M(
         - matches: coarse matches produced by FLANN, f_scaler: score scaler for epipolar constraints
         - threshold: segmentation score bigger than this will be counted
         - swap: without swap (swap = False), center_image will be warpped to the other image 
+        - Hg: global homography, if not None, use this to estimate matching mask
         - For loop free, as SIMD as possible via numpy
     """
-    if output_ransac:
-        H, ransac_mask  = match_RANSAC(kpts_cp, kpts_op, matches, swap)
+    if init_ransac:
+        if Hg is not None:
+            # re-estimate matchings use Hg here
+            H = Hg
+            ransac_mask = recompute_matching(kpts_cp, feats_cp, kpts_op, feats_op, matches, Hg)
+        else:
+            H, ransac_mask  = match_RANSAC(kpts_cp, kpts_op, matches, swap)
         original_mask   = ransac_mask.copy()
     else:
         H               = None
@@ -86,7 +124,7 @@ def calculate_M(
     segment[segment < 1e-6] = 0
     if verbose:
         for i, m_value in enumerate(ransac_mask):
-            valid = (m_value > 0) if output_ransac else "Unknown"
+            valid = (m_value > 0) if init_ransac else "Unknown"
             print(f"Matching score: {M[i, i]:.4f}\tvalid match: {valid}/{segment[i]}")
         plt.imshow(M)
         plt.colorbar()
@@ -96,23 +134,32 @@ def calculate_M(
     ransac_mask[bool_mask] = segment[bool_mask]     # array thresholding
     return segment, H, ransac_mask, original_mask
     
-def visualize_weighted(c_img: Arr, o_img: Arr, kpts_cp: list, kpts_op: list, matches: list, weight: Arr, draw_zero_w = False, disp = False):
+def visualize_weighted(
+    c_img: Arr, o_img: Arr, 
+    kpts_cp: list, kpts_op: list, 
+    matches: list, weight: Arr, 
+    mask_prev = None, draw_zero_w = False, disp = False, only_diff = False
+):
     offset_x = c_img.shape[1]
     out_image = np.concatenate((c_img, o_img), axis = 1)
-    for m, w in zip(matches, weight):
+    for i, (m, w) in enumerate(zip(matches, weight)):
         minor_weight = w <= 1e-3
         if minor_weight and not draw_zero_w: continue
+            
         xc, yc = kpts_cp[m.queryIdx].pt
         xo, yo = kpts_op[m.trainIdx].pt
         p1 = np.int32([xc, yc])
         p2 = np.int32([xo + offset_x, yo])
-        if minor_weight:
-            cv.circle(out_image, p1, 4, (0, 0, 255), 2)
-            cv.circle(out_image, p2, 4, (0, 0, 255), 2)
-        else:
-            cv.line(out_image, p1, p2, (0, int(255 * w), 0), 2)
-            cv.circle(out_image, p1, 4, (0, int(255 * w), 0), 2)
-            cv.circle(out_image, p2, 4, (0, int(255 * w), 0), 2)
+        color = (0, 0, 255) if minor_weight else (0, int(255 * w), 0)
+        if mask_prev is not None:
+            if (mask_prev[i] < 1e-4) ^ minor_weight:        # XOR logic: minor_weight = False (True) & mask_prev[i] = 1 & 0
+                color = (0, 255, 255)
+            elif only_diff:
+                continue
+        if not minor_weight:
+            cv.line(out_image, p1, p2, color, 2)
+        cv.circle(out_image, p1, 4, color, 2)
+        cv.circle(out_image, p2, 4, color, 2)
     if disp:
         imshow("weighted", out_image)
     return out_image
@@ -143,56 +190,63 @@ def model_solve(kpts_cp: list, kpts_op: list, matches: list, weights: Arr, param
 # Packaged function for multi-threading / easier calling
 def spectral_method(opts):
     # TODO: better image denoising model
+    H_pred      = None
+    mask_prev   = None
     center_img  = visualize_equalized_hist(case_idx = opts.case_idx, img_idx = CENTER_PIC_ID)
     other_img   = visualize_equalized_hist(case_idx = opts.case_idx, img_idx = opts.img_idx)
     
     kpts_cp, feats_cp, kpts_op, feats_op, matches \
         = get_coarse_matches(center_img, other_img, opts.case_idx, opts.img_idx)
     F   = get_fundamental(opts.case_idx, CENTER_PIC_ID, opts.img_idx)
-    
-    weights, H, ransac_mask, original_mask = calculate_M(
-        kpts_cp, feats_cp, kpts_op, feats_op, F, matches, 
-        threshold = opts.threshold, eps = opts.affinity_eps, f_scaler = opts.epi_weight, verbose = False
-    )           # To visualize the result of Affinity Matrix calculation, make verbose True
-
-    if 'save' in opts.viz_kpt:
-        viz_mask = ransac_mask                         # visualize RANSAC mask with spectral score
-        if opts.viz == 'ransac':                       # visualize RANSAC mask
-            viz_mask = original_mask
-        elif opts.viz == 'weight_only':                # visualize spectral score
-            viz_mask = weights
-        center_img_nc, other_img_nc = get_no_scat_img(opts.case_idx, opts.img_idx, CENTER_PIC_ID)
-        out_image = visualize_weighted(center_img_nc, other_img_nc, kpts_cp, kpts_op, matches, viz_mask, True)
-        cv.imwrite(f"./output/case_{opts.case_idx}/kpts_viz_{opts.img_idx}.png",  out_image)
-        if opts.viz_kpt == 'save_quit':
-            return                          # do not solve the model, just visualize matches
-    param = opts.huber_param if opts.lms else opts.fluc
-    H_pred = model_solve(kpts_cp, kpts_op, matches, ransac_mask, param = param, max_iter = opts.max_iter, verbose = opts.verbose, lms = opts.lms)
-
-    if opts.verbose:
-        print("Ground truth homography: ", H.ravel())
-    
-    if opts.save_warpped:
-        center_img_nc, other_img_nc = get_no_scat_img(opts.case_idx, opts.img_idx, CENTER_PIC_ID)
-        warpped_baseline = image_warping(center_img_nc, other_img_nc, H, False)
-        warpped_result   = image_warping(center_img_nc, other_img_nc, H_pred, False)
-        name = "lms" if opts.lms else "sdp"
-        cv.imwrite(f"./output/case_{opts.case_idx}/{name}_{opts.img_idx}.png",  warpped_result)
-        cv.imwrite(f"./output/case_{opts.case_idx}/baseline_{opts.img_idx}.png",warpped_baseline)
-
-    if opts.save_hmat:
-        H_pred = np.linalg.inv(H_pred).astype(np.float64)       # Out put inversed
-        H_pred /= H_pred[-1, -1]
-        save2mat(f"case{opts.case_idx}/H3{opts.img_idx}", H_pred, name = 'H', prefix = "../diff_1/results/")
+    for step in range(opts.em_steps):
+        can_output = (step == opts.em_steps - 1)
+        weights, H, ransac_mask, original_mask = calculate_M(
+            kpts_cp, feats_cp, kpts_op, feats_op, F, matches, 
+            threshold = opts.threshold, eps = opts.affinity_eps, f_scaler = opts.epi_weight, verbose = False, Hg = H_pred
+        )           # To visualize the result of Affinity Matrix calculation, make verbose True
         
+        if 'save' in opts.viz_kpt:
+            viz_mask = ransac_mask                          # visualize RANSAC mask with spectral score
+            if opts.viz == 'ransac':                        # visualize RANSAC mask
+                viz_mask = original_mask
+            elif opts.viz == 'weight_only':                 # visualize spectral score
+                viz_mask = weights
+            center_img_nc, other_img_nc = get_no_scat_img(opts.case_idx, opts.img_idx, CENTER_PIC_ID)
+            out_image = visualize_weighted(
+                center_img_nc, other_img_nc, kpts_cp, kpts_op, matches, 
+                viz_mask, mask_prev, draw_zero_w = True, only_diff = opts.only_diff
+            )
+            
+            cv.imwrite(f"./output/case_{opts.case_idx}/kpts_viz_{opts.img_idx}_em{step + 1}.png",  out_image)
+            if opts.viz_kpt == 'save_quit' and can_output:  # do not exit until the last iteration         
+                return                                      # do not solve the model, just visualize matches
+        param = opts.huber_param if opts.lms else opts.fluc
+        H_pred = model_solve(kpts_cp, kpts_op, matches, ransac_mask, param = param, max_iter = opts.max_iter, verbose = opts.verbose, lms = opts.lms)
+        mask_prev = original_mask
+
+        if opts.verbose:
+            print("Ground truth homography: ", H.ravel())
+        
+        if opts.save_warpped and can_output:
+            center_img_nc, other_img_nc = get_no_scat_img(opts.case_idx, opts.img_idx, CENTER_PIC_ID)
+            warpped_baseline = image_warping(center_img_nc, other_img_nc, H, False)
+            warpped_result   = image_warping(center_img_nc, other_img_nc, H_pred, False)
+            name = "lms" if opts.lms else "sdp"
+            cv.imwrite(f"./output/case_{opts.case_idx}/{name}_{opts.img_idx}.png",  warpped_result)
+            cv.imwrite(f"./output/case_{opts.case_idx}/baseline_{opts.img_idx}.png",warpped_baseline)
+
+        if opts.save_hmat and can_output:
+            H_save = np.linalg.inv(H_pred).astype(np.float64)       # Out put inversed
+            H_save /= H_save[-1, -1]
+            save2mat(f"case{opts.case_idx}/H3{opts.img_idx}", H_save, name = 'H', prefix = "../diff_1/results/")
 
 """ 
     TODO: 
     - parameter fine tuning and parameter reading (from file)
-    - Analysis of the keypoint distribution
     - Take another look at APAP
 """
 if __name__ == "__main__":
     opts = get_options()
     spectral_method(opts)
     
+    # Warning commented: /home/stn/.conda/envs/use/lib/python3.8/site-packages/cvxpy/problems/problem.py

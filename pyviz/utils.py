@@ -20,7 +20,8 @@ __T = np.float32([
 __all__ = [                                                                        
         'get_base_path', 'read_rot_trans_int', 'get_no_scat_img', 'get_features',    
         'save2mat', 'imshow', 'visualize_equalized_hist', 'image_warping',            
-        'cv_to_array', 'coarse_matching', 'get_fundamental', 'world_frame_ray_dir'
+        'cv_to_array', 'coarse_matching', 'get_fundamental', 'world_frame_ray_dir',
+        'normalized_feature'
 ]
 
 # ============================== IO Utilities ==================================
@@ -148,6 +149,11 @@ def coarse_matching(c_img: np.ndarray, o_img: np.ndarray, raw_kpts_cp: np.ndarra
     macther = cv.FlannBasedMatcher()
     matches = macther.match(feats_cp, feats_op)
     return kpts_cp, feats_cp, kpts_op, feats_op, matches
+
+def normalized_feature(feats_cp: np.ndarray, feats_op: np.ndarray, match: cv.DMatch):
+    feat_c = feats_cp[match.queryIdx]
+    feat_o = feats_op[match.trainIdx]
+    return feat_c / np.linalg.norm(feat_c), feat_o / np.linalg.norm(feat_o)
 
 # ============================ Transform utilities =============================
 

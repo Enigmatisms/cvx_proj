@@ -27,7 +27,7 @@ for ((case_idx=${start_case};case_idx<=${end_case};case_idx++)); do
     fi
     for img_idx in ${all_imgs[@]}; do
         echo "Processing image ${img_idx} of case ${case_idx}..."
-        python3 ./spectral_method.py --case_idx ${case_idx} --img_idx ${img_idx} -s # --viz_kpt save_quit
+        python3 ./spectral_method.py --case_idx ${case_idx} --img_idx ${img_idx} -s --viz_kpt save --em_steps 2 --only_diff
     done
 done
 
