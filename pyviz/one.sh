@@ -1,5 +1,5 @@
-start_case=1
-end_case=1
+case_idx=1
+img_idx=1
 
 if [ ! ''$1 = '' ]; then
     case_idx=$1
@@ -15,4 +15,4 @@ if [ ! -d ${dir_path} ]; then
     mkdir -p ${dir_path}
 fi
 echo "Processing image ${img_idx} of case ${case_idx}..."
-python3 ./spectral_method.py --case_idx ${case_idx} --img_idx ${img_idx} -s --viz_kpt save_quit --em_steps 2 --only_diff
+python3 ./spectral_method.py --case_idx ${case_idx} --img_idx ${img_idx} -s --viz_kpt save_quit --em_steps 1 --only_diff

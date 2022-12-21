@@ -35,8 +35,7 @@ def match_RANSAC(kpts_cp: Arr, kpts_op: Arr, matches: Arr, swap = False):
 def recompute_matching(
     kpts_cp: list, feats_cp: Arr, 
     kpts_op: list, feats_op: Arr, 
-    matches: list, H: Arr, 
-    radius = 6., score_thresh = 0.4
+    matches: list, H: Arr, opts,
 ) -> Arr:
     """
         Using merely opencv RANSAC may lead to degraded result: 
@@ -60,15 +59,14 @@ def recompute_matching(
         kpt_o = (kpt_o / kpt_o[2])[:-1]
         dist = np.linalg.norm(kpt_o - kpt_c)
         feat_score = np.sum(feat_c * feat_o)
-        if dist < radius and feat_score > score_thresh:
+        if dist < opts.radius and feat_score > opts.score_thresh:
             mask[i] = 1.
     return mask
 
 def calculate_M(
     kpts_cp: list, feats_cp: Arr, 
     kpts_op: list, feats_op: Arr, 
-    F: Arr, matches: Arr, 
-    f_scaler: float = 0.5, eps: float = 30.0, threshold: float = 0.6, 
+    F: Arr, matches: Arr, opts, 
     verbose = False, swap = True, init_ransac = True, Hg = None
 ):
     """ 
@@ -86,7 +84,7 @@ def calculate_M(
         if Hg is not None:
             # re-estimate matchings use Hg here
             H = Hg
-            ransac_mask = recompute_matching(kpts_cp, feats_cp, kpts_op, feats_op, matches, Hg)
+            ransac_mask = recompute_matching(kpts_cp, feats_cp, kpts_op, feats_op, matches, Hg, opts)
         else:
             H, ransac_mask  = match_RANSAC(kpts_cp, kpts_op, matches, swap)
         original_mask   = ransac_mask.copy()
@@ -108,9 +106,9 @@ def calculate_M(
     epi_vectors = F @ homo_src_pts.T                 # src_pts is of shape (N, 3), transpose it -> (3, N)
     epi_score   = np.abs(np.sum(homo_dst_pts * epi_vectors.T, axis = -1))
     match_score = np.sum(c_feats * o_feats, axis = -1)
-    M           = np.diag(match_score + f_scaler / (1. + epi_score))
+    M           = np.diag(match_score + opts.epi_weight / (1. + epi_score))
     # computing off-diagonal part
-    rcp_value   = 1 / 2 / (eps ** 2)
+    rcp_value   = 1 / 2 / (opts.affinity_eps ** 2)
     src_matrix  = np.sum((src_pts.reshape(-1, 1, 2) - src_pts.reshape(1, -1, 2)) ** 2, axis = -1)    # (N, N), distance between points in src img
     dst_matrix  = np.sum((dst_pts.reshape(-1, 1, 2) - dst_pts.reshape(1, -1, 2)) ** 2, axis = -1)    # (N, N), distance between points in dst img
     dist_matrix = ((src_matrix - dst_matrix) ** 2) * rcp_value
@@ -129,8 +127,8 @@ def calculate_M(
         plt.imshow(M)
         plt.colorbar()
         plt.show()
-    bool_mask = segment > threshold
-    ransac_mask *= threshold
+    bool_mask = segment > opts.aff_thresh
+    ransac_mask *= opts.aff_thresh
     ransac_mask[bool_mask] = segment[bool_mask]     # array thresholding
     return segment, H, ransac_mask, original_mask
     
@@ -188,22 +186,21 @@ def model_solve(kpts_cp: list, kpts_op: list, matches: list, weights: Arr, param
     return solver.solve(pts_c, pts_o, selected_weights, verbose = verbose, swap = swap)
 
 # Packaged function for multi-threading / easier calling
-def spectral_method(opts):
+def spectral_method(opts, img_idx = None):
     # TODO: better image denoising model
     H_pred      = None
     mask_prev   = None
+    image_idx   = opts.img_idx if img_idx is None else img_idx
     center_img  = visualize_equalized_hist(case_idx = opts.case_idx, img_idx = CENTER_PIC_ID)
-    other_img   = visualize_equalized_hist(case_idx = opts.case_idx, img_idx = opts.img_idx)
+    other_img   = visualize_equalized_hist(case_idx = opts.case_idx, img_idx = image_idx)
     
     kpts_cp, feats_cp, kpts_op, feats_op, matches \
-        = get_coarse_matches(center_img, other_img, opts.case_idx, opts.img_idx)
-    F   = get_fundamental(opts.case_idx, CENTER_PIC_ID, opts.img_idx)
+        = get_coarse_matches(center_img, other_img, opts.case_idx, image_idx)
+    F   = get_fundamental(opts.case_idx, CENTER_PIC_ID, image_idx)
     for step in range(opts.em_steps):
         can_output = (step == opts.em_steps - 1)
-        weights, H, ransac_mask, original_mask = calculate_M(
-            kpts_cp, feats_cp, kpts_op, feats_op, F, matches, 
-            threshold = opts.threshold, eps = opts.affinity_eps, f_scaler = opts.epi_weight, verbose = False, Hg = H_pred
-        )           # To visualize the result of Affinity Matrix calculation, make verbose True
+        weights, H, ransac_mask, original_mask = calculate_M(kpts_cp, feats_cp, kpts_op, feats_op, F, matches, opts, verbose = False, Hg = H_pred)           
+        # To visualize the result of Affinity Matrix calculation, make verbose True
         
         if 'save' in opts.viz_kpt:
             viz_mask = ransac_mask                          # visualize RANSAC mask with spectral score
@@ -211,13 +208,13 @@ def spectral_method(opts):
                 viz_mask = original_mask
             elif opts.viz == 'weight_only':                 # visualize spectral score
                 viz_mask = weights
-            center_img_nc, other_img_nc = get_no_scat_img(opts.case_idx, opts.img_idx, CENTER_PIC_ID)
+            center_img_nc, other_img_nc = get_no_scat_img(opts.case_idx, image_idx, CENTER_PIC_ID)
             out_image = visualize_weighted(
                 center_img_nc, other_img_nc, kpts_cp, kpts_op, matches, 
                 viz_mask, mask_prev, draw_zero_w = True, only_diff = opts.only_diff
             )
             
-            cv.imwrite(f"./output/case_{opts.case_idx}/kpts_viz_{opts.img_idx}_em{step + 1}.png",  out_image)
+            cv.imwrite(f"./{opts.base_folder}/case_{opts.case_idx}/kpts_viz_{image_idx}_em{step + 1}.png",  out_image)
             if opts.viz_kpt == 'save_quit' and can_output:  # do not exit until the last iteration         
                 return                                      # do not solve the model, just visualize matches
         param = opts.huber_param if opts.lms else opts.fluc
@@ -228,18 +225,22 @@ def spectral_method(opts):
             print("Ground truth homography: ", H.ravel())
         
         if opts.save_warpped and can_output:
-            center_img_nc, other_img_nc = get_no_scat_img(opts.case_idx, opts.img_idx, CENTER_PIC_ID)
+            center_img_nc, other_img_nc = get_no_scat_img(opts.case_idx, image_idx, CENTER_PIC_ID)
             warpped_baseline = image_warping(center_img_nc, other_img_nc, H, False)
             warpped_result   = image_warping(center_img_nc, other_img_nc, H_pred, False)
             name = "lms" if opts.lms else "sdp"
-            cv.imwrite(f"./output/case_{opts.case_idx}/{name}_{opts.img_idx}.png",  warpped_result)
-            cv.imwrite(f"./output/case_{opts.case_idx}/baseline_{opts.img_idx}.png",warpped_baseline)
+            cv.imwrite(f"./{opts.base_folder}/case_{opts.case_idx}/{name}_{image_idx}.png",  warpped_result)
+            cv.imwrite(f"./{opts.base_folder}/case_{opts.case_idx}/baseline_{image_idx}.png",warpped_baseline)
 
         if opts.save_hmat and can_output:
             H_save = np.linalg.inv(H_pred).astype(np.float64)       # Out put inversed
             H_save /= H_save[-1, -1]
-            save2mat(f"case{opts.case_idx}/H3{opts.img_idx}", H_save, name = 'H', prefix = "../diff_1/results/")
-
+            save2mat(f"case{opts.case_idx}/H3{image_idx}", H_save, name = 'H', prefix = "../diff_1/results/")
+            if opts.baseline_hmat:
+                H = np.linalg.inv(H).astype(np.float64)       # Out put inversed
+                H /= H[-1, -1]
+                save2mat(f"case{opts.case_idx}/H3{image_idx}_b", H, name = 'H', prefix = "../diff_1/results/")
+    
 """ 
     TODO: 
     - parameter fine tuning and parameter reading (from file)
@@ -250,3 +251,22 @@ if __name__ == "__main__":
     spectral_method(opts)
     
     # Warning commented: /home/stn/.conda/envs/use/lib/python3.8/site-packages/cvxpy/problems/problem.py
+
+
+# This guy is fucking slower?
+# def multi_proc_main():
+#     import multiprocessing as mtp
+#     import time
+#     proc_pool = []
+#     # Multi-Processing acceleration: process four Homography estimation problem at the same time
+#     opts = get_options()
+#     start_time = time.time()
+#     for img_idx in (2, 4, 5):
+#         pr = mtp.Process(target = spectral_method, args = (opts, img_idx))
+#         proc_pool.append(pr)
+#         pr.start()
+#     spectral_method(opts, 1)
+#     for proc in proc_pool:
+#         proc.join()
+#     end_time = time.time()
+#     print(f"Running time: {end_time - start_time}")

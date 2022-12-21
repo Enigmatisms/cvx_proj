@@ -25,10 +25,20 @@ for ((case_idx=${start_case};case_idx<=${end_case};case_idx++)); do
         echo "Directory '${dir_path}' does not exist. Creating folder..."
         mkdir -p ${dir_path}
     fi
+    # Single Process
     for img_idx in ${all_imgs[@]}; do
         echo "Processing image ${img_idx} of case ${case_idx}..."
-        python3 ./spectral_method.py --case_idx ${case_idx} --img_idx ${img_idx} -s --viz_kpt save --em_steps 2 --only_diff
+        python3 ./spectral_method.py -m --case_idx ${case_idx} --img_idx ${img_idx} --only_diff \
+                --em_steps 1            \
+                --baseline_hmat  
+               
     done
+
+    # Multi-Process
+    # echo "Multi-Processing: case ${case_idx}..."
+    # python3 ./spectral_method.py -m --case_idx ${case_idx} --only_diff \
+    #         --em_steps 1            \
+    #         --baseline_hmat         
 done
 
 echo "Completed."
