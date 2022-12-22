@@ -52,6 +52,7 @@ def recompute_matching(
         - score_thresh: SIFT features should be similar enough
     """
     mask = np.zeros(len(matches), dtype = np.float32)
+    print(f"{opts.em_radius}, {opts.score_thresh}")
     for i, m in enumerate(matches):
         feat_c, feat_o = normalized_feature(feats_cp, feats_op, m)
         kpt_c = np.float32(kpts_cp[m.queryIdx].pt)
@@ -59,7 +60,7 @@ def recompute_matching(
         kpt_o = (kpt_o / kpt_o[2])[:-1]
         dist = np.linalg.norm(kpt_o - kpt_c)
         feat_score = np.sum(feat_c * feat_o)
-        if dist < opts.radius and feat_score > opts.score_thresh:
+        if dist < opts.em_radius and feat_score > opts.score_thresh:
             mask[i] = 1.
     return mask
 
