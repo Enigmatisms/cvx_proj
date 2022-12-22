@@ -21,12 +21,12 @@ if [ ! ''$2 = '' ]; then
 fi
 
 em_steps=(1)
-em_radius=(6)
+em_radius=(5)
 score_thresh=(0.5)
-affinity_eps=(20.0 30.0 40.0)
-aff_thresh=(0.4 0.45 0.5 0.6)
-epi_weight=(0.0 0.2 0.5 1.0)
-fluc=(0.05 0.2 0.4)
+affinity_eps=(20.0 22.5 25.0 27.5)
+aff_thresh=(0.6 0.7 0.8)
+epi_weight=(0.25 0.5 0.75)
+fluc=(0.8 1.0 1.25)
 
 all_imgs=(1 2 4 5)
 
@@ -36,8 +36,8 @@ for ((case_idx=${start_case};case_idx<=${end_case};case_idx++)); do
     echo "Grid search:" &> ${result_file}
     cnt=0
     for em_step in ${em_steps[@]};      do
-    for em_rads in ${em_radius[@]};     do
     for score_t in ${score_thresh[@]};  do
+    for em_rads in ${em_radius[@]};     do
     for aff_eps in ${affinity_eps[@]};  do
     for aff_thr in ${aff_thresh[@]};    do
     for epi_wgt in ${epi_weight[@]};    do
@@ -52,7 +52,7 @@ for ((case_idx=${start_case};case_idx<=${end_case};case_idx++)); do
             python3 ./spectral_method.py -m --case_idx ${case_idx} --img_idx ${img_idx} --only_diff                     \
                     --em_steps ${em_step} --affinity_eps ${aff_eps}  --aff_thresh ${aff_thr} --epi_weight ${epi_wgt}    \
                     --fluc ${fluc_pa} --em_radius ${em_rads} --score_thresh ${score_t}                                  \
-                    --baseline_hmat  
+                    --baseline_hmat
         done
         /usr/local/MATLAB/R2022a/bin/matlab -nodesktop -nodisplay -nosplash -r \
             "run('../diff_1/program/main_example_${case_idx}.m');fprintf('${em_step}, ${aff_eps}, ${aff_thr}, ${epi_wgt}, ${fluc_pa}, ${em_rads}, ${score_t}');exit;" \

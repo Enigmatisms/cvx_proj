@@ -202,3 +202,6 @@ def world_frame_ray_dir(K_inv: np.ndarray, pix: np.ndarray, Rs: np.ndarray):
     return Rs @ init_w_coords                # normalized ray direction in the world frame
 
 # ================================ Mathematical utilities ====================================
+
+if __name__ == "__main__":
+    visualize_equalized_hist(1, 1, True)

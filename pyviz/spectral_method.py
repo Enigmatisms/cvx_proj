@@ -52,7 +52,6 @@ def recompute_matching(
         - score_thresh: SIFT features should be similar enough
     """
     mask = np.zeros(len(matches), dtype = np.float32)
-    print(f"{opts.em_radius}, {opts.score_thresh}")
     for i, m in enumerate(matches):
         feat_c, feat_o = normalized_feature(feats_cp, feats_op, m)
         kpt_c = np.float32(kpts_cp[m.queryIdx].pt)
@@ -253,21 +252,3 @@ if __name__ == "__main__":
     
     # Warning commented: /home/stn/.conda/envs/use/lib/python3.8/site-packages/cvxpy/problems/problem.py
 
-
-# This guy is fucking slower?
-# def multi_proc_main():
-#     import multiprocessing as mtp
-#     import time
-#     proc_pool = []
-#     # Multi-Processing acceleration: process four Homography estimation problem at the same time
-#     opts = get_options()
-#     start_time = time.time()
-#     for img_idx in (2, 4, 5):
-#         pr = mtp.Process(target = spectral_method, args = (opts, img_idx))
-#         proc_pool.append(pr)
-#         pr.start()
-#     spectral_method(opts, 1)
-#     for proc in proc_pool:
-#         proc.join()
-#     end_time = time.time()
-#     print(f"Running time: {end_time - start_time}")
