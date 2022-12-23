@@ -116,7 +116,6 @@ def calculate_M(
     np.fill_diagonal(off_score, 0.)                         # diagonal is already computed
     M          += off_score                                 # segmentation matrix is fully computed
 
-    U, _, _  = np.linalg.svd(M)         # SVD decomposition for the principle eigenvector
     segment  = np.abs(U[:, 0])
     segment /= np.max(segment)
     segment[segment < 1e-6] = 0
@@ -126,6 +125,7 @@ def calculate_M(
             print(f"Matching score: {M[i, i]:.4f}\tvalid match: {valid}/{segment[i]}")
         plt.imshow(M)
         plt.colorbar()
+        plt.tight_layout()
         plt.show()
     bool_mask = segment > opts.aff_thresh
     ransac_mask *= opts.aff_thresh

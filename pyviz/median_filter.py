@@ -125,53 +125,71 @@ def median_filter(img, f ,uk, vk, radius1=10,radius2=10):
     
     return f
 
+def apply_median_filter(img_ori: np.ndarray):
+    # 陷波滤波器处理周期噪声
+    img_ori = cv2.equalizeHist(img_ori)
+    # img_ori = np.hstack((img_ori,equ))
+    # 频率域中的其他特性
+    # FFT
+    img_fft = np.fft.fft2(img_ori.astype(np.float32))
+    # 中心化
+    fshift = np.fft.fftshift(img_fft)            # 将变换的频率图像四角移动到中心
+    # 中心化后的频谱
+    spectrum_fshift = spectrum_fft(fshift)
 
-# 陷波滤波器处理周期噪声
-img_ori = cv2.imread('diff_1/raw_data/case1/scat/img_haze1.png', 0)
-img_ori = cv2.equalizeHist(img_ori)
-# img_ori = np.hstack((img_ori,equ))
+    # 对频谱做对数变换
+    spectrum_log = np.log(1 + spectrum_fshift)
 
+    r = 5
+    uk = 48 # 1/8 width and height 
+    sn = 9
 
-# 频率域中的其他特性
-# FFT
-img_fft = np.fft.fft2(img_ori.astype(np.float32))
-# 中心化
-fshift = np.fft.fftshift(img_fft)            # 将变换的频率图像四角移动到中心
-# 中心化后的频谱
-spectrum_fshift = spectrum_fft(fshift)
-spectrum_fshift_n = np.uint8(spectrum_fshift)
+    f1shift = fshift
 
-# 对频谱做对数变换
-spectrum_log = np.log(1 + spectrum_fshift)
+    for i in range(2,sn):
+        f1shift = median_filter(img_ori,f1shift, radius1=r,radius2=r*5, uk=i*uk, vk=i*uk)
+        for j in range (1,i):
+            f1shift = median_filter(img_ori,f1shift, radius1=r,radius2=r*5, uk=j*uk, vk=i*uk)
+            f1shift = median_filter(img_ori,f1shift, radius1=r,radius2=r*5, uk=i*uk, vk=j*uk)
+        f1shift = median_filter(img_ori,f1shift, radius1=3,radius2=r*3, uk=0, vk=i*uk) 
+        f1shift = median_filter(img_ori,f1shift, radius1=3,radius2=r*3, uk=i*uk, vk=0) 
 
-r = 5
-uk = 48 # 1/8 width and height 
-sn = 9
+    # 滤波后的频谱
+    spectrum_filter = spectrum_fft(f1shift)
+    spectrum_filter_log = np.log(1 + spectrum_filter)
+    f2shift = np.fft.ifftshift(f1shift) #对新的进行逆变换
+    img_new = np.fft.ifft2(f2shift)
+    img_new = np.abs(img_new)
+    return img_new, spectrum_log, spectrum_filter_log, img_ori
 
-f1shift = fshift
+def single_channel_main(image: np.ndarray):
+    img_new, spectrum_log, spectrum_filter_log, img_hist = apply_median_filter(image[..., 0])
+    plt.figure(figsize=(15, 15))
+    plt.subplot(221), plt.imshow(img_hist, 'gray'), plt.title('With Sine noise'), plt.xticks([]),plt.yticks([])
+    plt.subplot(222), plt.imshow(spectrum_log, 'gray'), plt.title('Spectrum'), plt.xticks([]),plt.yticks([])
+    plt.subplot(223), plt.imshow(spectrum_filter_log, 'gray'), plt.title('Spectrum Filtered'), plt.xticks([]),plt.yticks([])
+    plt.subplot(224), plt.imshow(img_new, 'gray'), plt.title('Denoised'), plt.xticks([]),plt.yticks([])
+    plt.tight_layout()
+    plt.show()
+    cv2.imwrite("img_haze1_denoised.png",img_new)
 
-for i in range(2,sn):
-    f1shift = median_filter(img_ori,f1shift, radius1=r,radius2=r*5, uk=i*uk, vk=i*uk)
-    for j in range (1,i):
-        f1shift = median_filter(img_ori,f1shift, radius1=r,radius2=r*5, uk=j*uk, vk=i*uk)
-        f1shift = median_filter(img_ori,f1shift, radius1=r,radius2=r*5, uk=i*uk, vk=j*uk)
-    f1shift = median_filter(img_ori,f1shift, radius1=3,radius2=r*3, uk=0, vk=i*uk) 
-    f1shift = median_filter(img_ori,f1shift, radius1=3,radius2=r*3, uk=i*uk, vk=0) 
+def all_channel_main(image: np.ndarray):
+    output_channels = []
+    histed_channels = []
+    for i in range(3):
+        img_new, _, _, img_histed = apply_median_filter(image[..., i])
+        output_channels.append(img_new)
+        histed_channels.append(img_histed)
+    img_output = np.stack(output_channels, axis = -1)
+    print(img_output.dtype)
+    img_histed = np.stack(histed_channels, axis = -1)
+    img_output /= 255
+    plt.figure(1)
+    plt.subplot(121), plt.imshow(img_histed), plt.title('Original image'), plt.xticks([]),plt.yticks([])
+    plt.subplot(122), plt.imshow(img_output), plt.title('Output filtered'), plt.xticks([]),plt.yticks([])
+    plt.tight_layout()
+    plt.show()
 
-# 滤波后的频谱
-spectrum_filter = spectrum_fft(f1shift)
-spectrum_filter_log = np.log(1 + spectrum_filter)
-f2shift = np.fft.ifftshift(f1shift) #对新的进行逆变换
-img_new = np.fft.ifft2(f2shift)
-img_new = np.abs(img_new)
-
-
-plt.figure(figsize=(15, 15))
-plt.subplot(221), plt.imshow(img_ori, 'gray'), plt.title('With Sine noise'), plt.xticks([]),plt.yticks([])
-plt.subplot(222), plt.imshow(spectrum_log, 'gray'), plt.title('Spectrum'), plt.xticks([]),plt.yticks([])
-plt.subplot(223), plt.imshow(spectrum_filter_log, 'gray'), plt.title('Spectrum'), plt.xticks([]),plt.yticks([])
-plt.subplot(224), plt.imshow(img_new, 'gray'), plt.title('Spectrum'), plt.xticks([]),plt.yticks([])
-
-plt.tight_layout()
-plt.show()
-cv2.imwrite("img_haze1_denoised.png",img_new)
+if __name__ == "__main__":
+    img_ori = cv2.imread('../diff_1/raw_data/case1/scat/img_haze1.png')
+    all_channel_main(img_ori)

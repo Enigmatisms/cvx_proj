@@ -13,6 +13,7 @@ import numpy as np
 from sys import argv
 from tqdm import tqdm
 from apap_utils import *
+from utils import save2mat
 from baseline_stitch_test import visualize_feature_pairs
 from utils import imshow, visualize_equalized_hist, get_no_scat_img
 
@@ -143,8 +144,6 @@ class APAP:
         local_weight = np.zeros([mesh_n, pt_size, sample_n])
         aa = self.matrix_generate(sample_n, cf1, cf2)  # initiate A
         
-        print(vertices)
-
         for i in range(mesh_n):
             for j in range(pt_size):
 
@@ -219,10 +218,9 @@ class APAP:
 
     
 if __name__ == "__main__":
-    print("APAP unit test.")
     mesh_size   = 100
     gamma       = 0.5
-    sigma       = 1000
+    sigma       = 100
     
     argv_len = len(argv)
     case_idx = 1
@@ -236,8 +234,6 @@ if __name__ == "__main__":
     center_img = visualize_equalized_hist(case_idx = case_idx, img_idx = CENTER_PIC_ID)
     other_img = visualize_equalized_hist(case_idx = case_idx, img_idx = img_idx)
     final_src, final_dst, H = visualize_feature_pairs(center_img, other_img, case_idx = case_idx, pic_id = img_idx, swap = True)
-    print("Global H estimated.")
-    
     
     final_w, final_h, offset_x, offset_y = final_size(center_img, other_img, H)
     mesh = get_mesh((final_w, final_h), mesh_size + 1)
@@ -248,9 +244,22 @@ if __name__ == "__main__":
     # After estimation: blending
     center_img_nc, other_img_nc = get_no_scat_img(case_idx, img_idx, CENTER_PIC_ID)
     cimg_h, c_imgw, _ = center_img_nc.shape
+
+    print(f"local_homography shape: {local_homography.shape}")
+
+    mesh_y, mesh_x, _, _ = local_homography.shape
+    for i in range(mesh_y):
+        for j in range(mesh_x):
+            local_homography[i, j] = np.linalg.inv(local_homography[i, j].copy())
+            local_homography[i, j] /= local_homography[i, j, -1, -1]
+
+
     
-    warpped_img = stitcher.local_warp(other_img_nc, local_homography, mesh, True)
-    dst_temp = np.zeros_like(warpped_img)
-    dst_temp[offset_y: cimg_h + offset_y, offset_x: c_imgw + offset_x, :] = center_img_nc
-    result = uniform_blend(warpped_img, dst_temp)
-    cv.imwrite("./output/apap.png", result)
+    # warpped_img = stitcher.local_warp(other_img_nc, local_homography, mesh, True)
+    # dst_temp = np.zeros_like(warpped_img)
+    # dst_temp[offset_y: cimg_h + offset_y, offset_x: c_imgw + offset_x, :] = center_img_nc
+    # result = uniform_blend(warpped_img, dst_temp)
+    # cv.imwrite("./output/apap.png", result)
+    local_homography = local_homography.transpose(0, 1, 3, 2)
+    local_homography = local_homography.astype(np.float64).reshape(-1, 9)
+    save2mat(f"case{case_idx}/H3{img_idx}_apap", local_homography, name = 'H', prefix = "../diff_1/results/")
