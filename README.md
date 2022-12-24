@@ -3,22 +3,23 @@
 
 ## I. Requirements
 
-The code is built and tested mainly on Ubuntu 20.04. It should work for most of the ubuntu distributions like 18.04 and 22.04. For windows users, there is of course refactoring work to do:
+The code is built and tested mainly on Ubuntu 20.04. It should work for most of the ubuntu distributions like 18.04 and 22.04. For windows users, **<u>shell script can not be run directly</u>**, for this reason: Git is required (git bash can run the code.)
 
-- All the relative directories should be modified: on Linux (`c/Desktop`), on Windows: `c\Desktop`
 - We do not recommend running the code directly like: `python3 ./spectral_method.py` , since there are some parameters to be fed to the algorithm. Therefore we provide a shell script for you to run the code. Shell script might not work so well on windows (since some of the commands might not be available).
 
 The dependencies are as follows:
 
-| Packages      | version (exact) | Functionality                    |
-| ------------- | --------------- | -------------------------------- |
-| numpy         | 1.21.0          | Matrix compuation                |
-| matplotlib    | 3.1.2           | Visualization                    |
-| opencv-python | 4.6.0.66        | Image processing lib             |
-| cvxpy         | 1.2.2           | SDP/LMS solver                   |
-| scipy         | 1.9.0           | IO / Transformation utility      |
-| pandas        | 1.4.3           | IO utility                       |
-| tqdm          | 4.64.0          | Progress bar (used only in APAP) |
+| Packages       | version (exact) | Functionality                    |
+| -------------- | --------------- | -------------------------------- |
+| numpy          | 1.21.0          | Matrix compuation                |
+| matplotlib     | 3.1.2           | Visualization                    |
+| opencv-python  | 4.6.0.66        | Image processing lib             |
+| cvxpy          | 1.2.2           | SDP/LMS solver                   |
+| scipy          | 1.9.0           | IO / Transformation utility      |
+| pandas         | 1.4.3           | IO utility                       |
+| tqdm           | 4.64.0          | Progress bar (used only in APAP) |
+| openpyxl       | 3.0.10          | pandas xlsx reading lib          |
+| ConfigArgParse | 1.5.2           | parse parameter from file        |
 
 To install the required packages, we recommend `Anaconda`:
 
@@ -106,7 +107,11 @@ Note that SDP problem is hard to solve, yet Huber-LMS is solved instantly. The c
 ./run_all.sh		    # case 1 to 4 by default, if no parameter is given
 ```
 
-This shell script will generate folder for you if there is some output folder missing.
+This shell script will generate folder for you if there is some output folder missing. The output might contains:
+
+> UserWarning: **Solution may be inaccurate**. Try another solver, adjusting the solver settings, or solve with verbose=True for more information. "Solution may be inaccurate. Try another solver, "
+
+Just leave this alone. The solution is pretty good, I think.
 
 - `one.sh` in `pyviz/` is given.
 
@@ -125,6 +130,25 @@ python3 ./spectral_method.py --help
 ```
 
 Directly run the code might fail, since if the output folder requirement is not met, exceptions will be thrown.
+
+#### For Windows users
+
+At line 31 of `run_all.sh`:
+
+```shell
+python3 ./spectral_method.py -m -s --viz ransac --viz_kpt save --case_idx ${case_idx} --img_idx ${img_idx} --only_diff --baseline_hmat \
+            --config ./configs/case${case_idx}.txt  
+```
+
+Make sure python on your device is called `python3` (for example, my python on windows is called `py`, so `python3` will trigger error). If not `python3`, just modify the code. I can not cope with all the different aliases for python, this is simply... annoying, so that's the reason we recommend you to run this code on a Ubuntu system with Matlab installed.
+
+**<u>For unknown reasons (maybe the version of cvxpy), cvxpy takes longer time to solve SDP problems on Windows.</u>** And have said before, Git is required to run the `./run_all.sh` and `./one.sh`:
+
+|              step1 cd to pyviz folder               |        step 2: use git bash to run the code        |
+| :-------------------------------------------------: | :------------------------------------------------: |
+| <img src="assets/openbash.png" style="zoom:67%;" /> | <img src="assets/gitbash.png" style="zoom:80%;" /> |
+
+Quick link for Git: [Git-scm.com](https://git-scm.com/).
 
 ### result evaluation
 
