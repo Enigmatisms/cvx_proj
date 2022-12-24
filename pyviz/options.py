@@ -1,8 +1,16 @@
-import argparse
+#-*-coding:utf-8-*-
+"""
+    Argument parser (from file and terminal)
+    @author Qianyue He
+    @date 2022.12.16
+"""
+
+import configargparse
 
 def get_options(delayed_parse = False):
     # IO parameters
-    parser = argparse.ArgumentParser()
+    parser = configargparse.ArgumentParser()
+    parser.add_argument('--config', is_config_file=True, help='Config file path')
     parser.add_argument("--case_idx", type = int, default = 1, help = "Id of Experiment (1, 2, 3, 4)")
     parser.add_argument("--img_idx",  type = int, default = 1, help = "Id of image (1, 2, 4, 5)")
     parser.add_argument("--em_steps", type = int, default = 2, help = "E-M step for iterative matching re-estimation")
@@ -32,3 +40,7 @@ def get_options(delayed_parse = False):
     if delayed_parse:
         return parser
     return parser.parse_args()
+
+if __name__ == "__main__":
+    args = get_options()
+    print(f"Fluc: {args.fluc}")

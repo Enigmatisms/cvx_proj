@@ -1,3 +1,4 @@
+#-*-coding:utf-8-*-
 """
     Python test for SfM using the given feature points
     If this module succeeds in doing the things I want, it can be scaled into our model
@@ -11,6 +12,7 @@ import scipy.io
 import cv2 as cv
 import numpy as np
 import matplotlib.pyplot as plt
+import mpl_toolkits.mplot3d as mp3
 
 from itertools import compress
 from utils import *
@@ -100,6 +102,7 @@ def visualize_covid(all_imgs: list, covid: list, res_src_pts: list, all_dst_pts:
         cx, cy = res_src_pts[i].ravel()
         center_img = all_imgs[CENTER_PIC_ID - 1].copy()
         center_img = cv.circle(center_img, (int(cx), int(cy)), 3, (0, 255, 0), -1)
+        center_img = cv.circle(center_img, (int(cx), int(cy)), 8, (0, 255, 0), 2)
         imgs_disp = [center_img]
         for j, idx in enumerate(item):
             if idx == -1: continue
@@ -108,8 +111,10 @@ def visualize_covid(all_imgs: list, covid: list, res_src_pts: list, all_dst_pts:
             px, py = all_dst_pts[j][idx].ravel()
             out_img = all_imgs[img_idx].copy()
             out_img = cv.circle(out_img, (int(px), int(py)), 3, (0, 255, 0), -1)
+            out_img = cv.circle(out_img, (int(px), int(py)), 8, (0, 255, 0), 2)
             imgs_disp.append(out_img)
         result_img = np.concatenate(imgs_disp, axis = 1)
+        cv.imwrite("covid.png", result_img)
         if imshow("COVID", result_img):
             print("Early break.")
             break
@@ -173,6 +178,7 @@ def covid_3d_optimize(covid, res_src_pts, all_dst_pts, case_idx = 1, visualize =
             ax.set_zlim((30, 85))
             ax.set_xlim((0, 50))
             ax.legend()
+            plt.tight_layout()
             plt.show()
     
 
@@ -180,5 +186,5 @@ if __name__ == "__main__":
     case_idx = 1
     imgs, all_src_pts, all_dst_pts, all_matches = match_all(case_idx, False, False)
     res_src_pts, covid = get_covid(all_src_pts, all_matches)
-    # visualize_covid(imgs, covid, res_src_pts, all_dst_pts, True)
-    covid_3d_optimize(covid, res_src_pts, all_dst_pts, case_idx, True)
+    visualize_covid(imgs, covid, res_src_pts, all_dst_pts, True)
+    # covid_3d_optimize(covid, res_src_pts, all_dst_pts, case_idx, True)

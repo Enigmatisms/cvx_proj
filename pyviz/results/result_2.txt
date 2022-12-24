@@ -1,0 +1,3 @@
+Grid search:
+RMSE haze: 1.4462, RMSE no haze: 5.1958, 2, 25.0, 0.8, 0.5, 0.2, 5, 0.5
+RMSE haze: 1.4472, RMSE no haze: 5.1982, 2, 25.0, 0.8, 0.5, 0.3, 5, 0.5

@@ -1,0 +1,7 @@
+em_steps = 1
+affinity_eps = 22.5
+aff_thresh = 0.7
+epi_weight = 0.75
+fluc = 1.25 
+em_radius = 5
+score_thresh = 0.5

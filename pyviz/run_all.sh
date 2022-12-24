@@ -28,17 +28,9 @@ for ((case_idx=${start_case};case_idx<=${end_case};case_idx++)); do
     # Single Process
     for img_idx in ${all_imgs[@]}; do
         echo "Processing image ${img_idx} of case ${case_idx}..."
-        python3 ./spectral_method.py -m -s --viz ransac --viz_kpt save --case_idx ${case_idx} --img_idx ${img_idx} --only_diff \
-                --em_steps 1 --affinity_eps 20.0 --aff_thresh 0.4 --epi_weight 0.0 --fluc 0.05           \
-                --baseline_hmat  
-               
-    done
-
-    # Multi-Process
-    # echo "Multi-Processing: case ${case_idx}..."
-    # python3 ./spectral_method.py -m --case_idx ${case_idx} --only_diff \
-    #         --em_steps 1            \
-    #         --baseline_hmat         
+        python3 ./spectral_method.py -m -s --viz ransac --viz_kpt save --case_idx ${case_idx} --img_idx ${img_idx} --only_diff --baseline_hmat \
+            --config ./configs/case${case_idx}.txt  
+    done   
 done
 
 echo "Completed."

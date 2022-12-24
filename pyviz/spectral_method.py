@@ -115,7 +115,7 @@ def calculate_M(
     off_score   = np.maximum(4.5 - dist_matrix, 0.)         # clamp
     np.fill_diagonal(off_score, 0.)                         # diagonal is already computed
     M          += off_score                                 # segmentation matrix is fully computed
-
+    U, _, _  = np.linalg.svd(M)
     segment  = np.abs(U[:, 0])
     segment /= np.max(segment)
     segment[segment < 1e-6] = 0

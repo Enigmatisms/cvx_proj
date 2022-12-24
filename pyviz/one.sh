@@ -15,4 +15,5 @@ if [ ! -d ${dir_path} ]; then
     mkdir -p ${dir_path}
 fi
 echo "Processing image ${img_idx} of case ${case_idx}..."
-python3 ./spectral_method.py --case_idx ${case_idx} --img_idx ${img_idx} -s --viz_kpt save_quit --em_steps 1 --only_diff
+python3 ./spectral_method.py --case_idx ${case_idx} --img_idx ${img_idx} -s -m --viz_kpt save --only_diff --viz ransac \
+    --config ./configs/case${case_idx}.txt  --baseline_hmat
