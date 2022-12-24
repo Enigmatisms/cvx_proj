@@ -185,7 +185,6 @@ def model_solve(kpts_cp: list, kpts_op: list, matches: list, weights: Arr, param
         solver = SDPSolver(max_iter, param, param)
     return solver.solve(pts_c, pts_o, selected_weights, verbose = verbose, swap = swap)
 
-# Packaged function for multi-threading / easier calling
 def spectral_method(opts, img_idx = None):
     # TODO: better image denoising model
     H_pred      = None
@@ -241,14 +240,8 @@ def spectral_method(opts, img_idx = None):
                 H /= H[-1, -1]
                 save2mat(f"case{opts.case_idx}/H3{image_idx}_b", H, name = 'H', prefix = "../diff_1/results/")
     
-""" 
-    TODO: 
-    - parameter fine tuning and parameter reading (from file)
-    - Take another look at APAP
-"""
 if __name__ == "__main__":
     opts = get_options()
     spectral_method(opts)
     
     # Warning commented: /home/stn/.conda/envs/use/lib/python3.8/site-packages/cvxpy/problems/problem.py
-
