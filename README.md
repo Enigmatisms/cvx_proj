@@ -45,33 +45,33 @@ The structure of the code repo is as follows:
 ```
 ├── (e) renamer.sh --- Rename all the Chinese folders and files into English ones
 ├── (d) pyviz  --- CNN / Swin Transformer / MoCo-v3 model definition folder
-	 ├── (d) output/ This folder will be automatically generated if you use run_all.sh or one.sh
-	 	  ├── (d) case_1/
-	 	  ├── (d) case_2/
-	 	  ├── (d) case_3/
-	 	  └── (d) case_4/
-	 ├── (d) configs/ Parameter setting files. Read automatically.
-	 	  └── ...
-	 ├── (f) apap_utils.py --- APAP utility functions
-	 ├── (f) apap.py --- APAP executable file
-	 ├── (f) baseline_stitch_test.py --- OpenCV baseline RANSAC test executable script
-	 ├── (f) median_filter.py --- Frequency filtering script to remove periodic noise
-	 ├── (f) model.py --- LMS and SDP cvxpy solver model
-	 ├── (e) one.sh --- Run only one image of a case, executable shell script
-	 ├── (f) options.py --- Parameter parser definition
+     ├── (d) output/ This folder will be automatically generated if you use run_all.sh or one.sh
+     ├── (d) case_1/
+     ├── (d) case_2/
+     ├── (d) case_3/
+     └── (d) case_4/
+	  ├── (d) configs/ Parameter setting files. Read automatically.
+	  └── ...
+     ├── (f) apap_utils.py --- APAP utility functions
+     ├── (f) apap.py --- APAP executable file
+     ├── (f) baseline_stitch_test.py --- OpenCV baseline RANSAC test executable script
+     ├── (f) median_filter.py --- Frequency filtering script to remove periodic noise
+     ├── (f) model.py --- LMS and SDP cvxpy solver model
+     ├── (e) one.sh --- Run only one image of a case, executable shell script
+     ├── (f) options.py --- Parameter parser definition
      ├── (f) run_all.sh --- Run all the images of all cases (by default), executable shell script
      ├── (f) sfm_test.py --- Structure from motion feature point optimization test executable script
      ├── (f) spectral_method.py --- main caller of the model, main executable script
-	 └── (f) utils.py --- Utility functions
+     └── (f) utils.py --- Utility functions
 └── (d) diff_1 --- Input data / output files, matlab codes
-	 ├── (d) program/ --- Matlab executables
-	 	  └── (f) main_example.m --- RMSE testing matlab script (modified from the given code).
-	 ├── (d) raw_data/ --- Input data (keypoints, camera parameters, images)
-	 	  ├── (d) case1/
-	 	  ├── (d) case2/
-	 	  ├── (d) case3/
-	 	  └── (d) case4/
-	 └── (d) results/--- Output folder
+     ├── (d) program/ --- Matlab executables
+     	  └── (f) main_example.m --- RMSE testing matlab script (modified from the given code).
+     ├── (d) raw_data/ --- Input data (keypoints, camera parameters, images)
+	  ├── (d) case1/
+	  ├── (d) case2/
+	  ├── (d) case3/
+	  └── (d) case4/
+     └── (d) results/--- Output folder
 ```
 
 ---
